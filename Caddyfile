@@ -1,0 +1,5 @@
+{$DOMAIN} {
+  reverse_proxy /mcp gateway:3000
+  reverse_proxy /v1/bridge/generations gateway:3000
+  reverse_proxy /healthz gateway:3000
+}

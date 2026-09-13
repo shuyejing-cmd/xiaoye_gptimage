@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import { mkdtemp, mkdir, symlink, truncate, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import { readValidatedReferenceImage } from "../../src/bridge/image-file.mjs";
+const png=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL8VwAAAABJRU5ErkJggg==","base64");
+test("reads allowed PNG",async()=>{const root=await mkdtemp(join(tmpdir(),"bridge-root-"));const imagePath=join(root,"reference.png");await writeFile(imagePath,png);const r=await readValidatedReferenceImage({imagePath,allowedRoots:[root]});assert.equal(r.mimeType,"image/png");});
+test("rejects outside path",async()=>{const p=await mkdtemp(join(tmpdir(),"bridge-outside-"));const root=join(p,"allowed");await mkdir(root);const imagePath=join(p,"outside.png");await writeFile(imagePath,png);await assert.rejects(()=>readValidatedReferenceImage({imagePath,allowedRoots:[root]}),/not allowed/);});
+test("rejects a file larger than 4 MiB",async()=>{const root=await mkdtemp(join(tmpdir(),"bridge-large-"));const imagePath=join(root,"large.png");await writeFile(imagePath,png);await truncate(imagePath,4*1024*1024+1);await assert.rejects(()=>readValidatedReferenceImage({imagePath,allowedRoots:[root]}),/4 MiB/);});
+test("rejects a symlink escaping an allowed root",async(t)=>{const p=await mkdtemp(join(tmpdir(),"bridge-link-"));const root=join(p,"allowed");await mkdir(root);const outside=join(p,"outside.png"),linked=join(root,"linked.png");await writeFile(outside,png);try{await symlink(outside,linked)}catch{t.skip("symlink unavailable");return}await assert.rejects(()=>readValidatedReferenceImage({imagePath:linked,allowedRoots:[root]}),/not allowed/);});

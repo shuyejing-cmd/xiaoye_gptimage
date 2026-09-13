@@ -1,0 +1,20 @@
+services:
+  gateway:
+    build: .
+    env_file: .env
+    volumes:
+      - tasks-data:/app/data
+    networks: [internal]
+  caddy:
+    image: caddy:2
+    env_file: .env
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    networks: [internal]
+volumes:
+  tasks-data:
+  caddy-data:
+networks:
+  internal:
