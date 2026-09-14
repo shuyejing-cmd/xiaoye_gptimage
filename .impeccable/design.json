@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-14T02:34:01.641Z",
+  "title": "Design System: WorkBuddy 图片 MCP",
+  "extensions": {
+    "typographyMeta": {
+      "display": {
+        "displayName": "封面级主标题",
+        "purpose": "仅用于登录首页主标题。"
+      },
+      "headline": {
+        "displayName": "账页章节标题",
+        "purpose": "用于页面标题与入口标题。"
+      },
+      "body": {
+        "displayName": "说明正文",
+        "purpose": "用于任务说明、帮助文字和长段落。"
+      },
+      "label": {
+        "displayName": "登记标签",
+        "purpose": "用于表头、状态、日期和登记信息。"
+      }
+    },
+    "motion": [
+      {
+        "name": "button-state",
+        "value": "background .12s, color .12s",
+        "purpose": "主按钮在墨色反相与透明状态之间快速切换。"
+      },
+      {
+        "name": "stamp-turn",
+        "value": "25s linear infinite",
+        "purpose": "登录印章文字的缓慢旋转；减少动态时停用。"
+      },
+      {
+        "name": "loading-turn",
+        "value": ".8s linear infinite",
+        "purpose": "加载指示器的连续旋转；减少动态时停用。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-sidebar",
+        "value": "900px"
+      },
+      {
+        "name": "single-admin-column",
+        "value": "700px"
+      },
+      {
+        "name": "bottom-navigation",
+        "value": "600px"
+      },
+      {
+        "name": "narrow-hero",
+        "value": "360px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "用于页面主动作，以墨色反相和方角轮廓形成明确提交点。",
+      "html": "<button class=\"ds-btn-primary\">发送验证码</button>",
+      "css": ".ds-btn-primary { display: inline-flex; justify-content: center; align-items: center; border: 1px solid var(--ink); border-radius: 0; background: var(--ink); color: var(--paper); padding: 14px 20px; font-family: \"JetBrains Mono Variable\", monospace; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; cursor: pointer; transition: background .12s, color .12s; } .ds-btn-primary:hover { background: transparent; color: var(--ink); } .ds-btn-primary:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; } .ds-btn-primary:disabled { opacity: .45; cursor: wait; }"
+    },
+    {
+      "name": "Text Button",
+      "kind": "button",
+      "description": "用于更换邮箱、退出和人工调账等次级动作。",
+      "html": "<button class=\"ds-btn-text\">更换邮箱</button>",
+      "css": ".ds-btn-text { border: 0; background: none; color: var(--ink); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; } .ds-btn-text:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "纸面式直角输入框，用清楚描边而非阴影标记编辑边界。",
+      "html": "<label class=\"ds-field-label\">邮箱地址<input class=\"ds-field\" type=\"email\" placeholder=\"name@example.com\"></label>",
+      "css": ".ds-field-label { color: var(--ink); font-family: \"JetBrains Mono Variable\", monospace; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; } .ds-field { display: block; width: 100%; margin-top: 9px; padding: 15px 14px; border: 1px solid #a8a6a1; border-radius: 0; background: #fbfaf7; color: var(--ink); font-family: \"Manrope Variable\", sans-serif; font-size: 16px; } .ds-field:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }"
+    },
+    {
+      "name": "Sidebar Navigation Item",
+      "kind": "nav",
+      "description": "账户功能导航项；默认透明，悬停显纸层，激活后墨色反相。",
+      "html": "<button class=\"ds-nav-item ds-nav-item-active\" aria-current=\"page\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\"><path d=\"M4 5h16v14H4z\"></path><path d=\"M8 9h8M8 13h5\"></path></svg><span>概览</span></button>",
+      "css": ".ds-nav-item { border: 0; background: none; color: var(--ink); padding: 12px; display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left; font-family: \"Manrope Variable\", sans-serif; font-size: 14px; } .ds-nav-item svg { width: 20px; height: 20px; } .ds-nav-item:hover { background: #e4e3dd; } .ds-nav-item:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; } .ds-nav-item-active { background: var(--ink); color: white; }"
+    },
+    {
+      "name": "Success Status Tag",
+      "kind": "chip",
+      "refersTo": "status-success",
+      "description": "用于成功、已通过和有效状态。",
+      "html": "<span class=\"ds-status-success\">已成功</span>",
+      "css": ".ds-status-success { display: inline-block; color: var(--success); border: 1px solid #8bb09e; background: #e7f0e9; padding: 7px 8px; font-family: \"JetBrains Mono Variable\", monospace; font-size: 10px; line-height: 1; letter-spacing: .05em; text-transform: uppercase; }"
+    },
+    {
+      "name": "Failure Status Tag",
+      "kind": "chip",
+      "refersTo": "status-danger",
+      "description": "用于失败、驳回和撤销状态。",
+      "html": "<span class=\"ds-status-danger\">已失败</span>",
+      "css": ".ds-status-danger { display: inline-block; color: var(--danger); border: 1px solid #cda49c; background: #f4e8e4; padding: 7px 8px; font-family: \"JetBrains Mono Variable\", monospace; font-size: 10px; line-height: 1; letter-spacing: .05em; text-transform: uppercase; }"
+    },
+    {
+      "name": "Review Status Tag",
+      "kind": "chip",
+      "refersTo": "status-review",
+      "description": "用于未知、人工复核和待审核状态。",
+      "html": "<span class=\"ds-status-review\">人工复核</span>",
+      "css": ".ds-status-review { display: inline-block; color: #72530b; border: 1px solid #c5aa6d; background: #f3eddc; padding: 7px 8px; font-family: \"JetBrains Mono Variable\", monospace; font-size: 10px; line-height: 1; letter-spacing: .05em; text-transform: uppercase; }"
+    },
+    {
+      "name": "Package Tile",
+      "kind": "card",
+      "description": "充值套餐的连续账格，以规则线分列而非独立悬浮卡片。",
+      "html": "<button class=\"ds-package\"><span>套餐名称</span><strong>— 次</strong><small>创建订单</small></button>",
+      "css": ".ds-package { min-height: 190px; border: 0; border-right: 1px solid var(--line); background: none; color: var(--ink); text-align: left; padding: 30px; display: flex; flex-direction: column; align-items: flex-start; cursor: pointer; font-family: \"Manrope Variable\", sans-serif; } .ds-package span { font-size: 14px; } .ds-package strong { font-size: 42px; margin: auto 0; font-weight: 520; } .ds-package small { font-family: \"JetBrains Mono Variable\", monospace; } .ds-package:hover { background: #eeede8; } .ds-package:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }"
+    },
+    {
+      "name": "Key Reveal Panel",
+      "kind": "custom",
+      "refersTo": "key-reveal",
+      "description": "一次性展示完整 Key 的淡紫确认面。",
+      "html": "<section class=\"ds-key-reveal\"><b>现在复制并妥善保存</b><code>wb_live_••••••••</code><button>复制 Key</button><p>关闭这条提示后无法再次查看。</p></section>",
+      "css": ".ds-key-reveal { background: #e0e1f2; color: var(--ink); padding: 26px 28px; display: grid; grid-template-columns: 1fr auto; gap: 12px 24px; font-family: \"Manrope Variable\", sans-serif; } .ds-key-reveal b, .ds-key-reveal p { grid-column: 1 / -1; } .ds-key-reveal code { padding: 14px; background: #f8f7f4; overflow: auto; font-family: \"JetBrains Mono Variable\", monospace; } .ds-key-reveal button { border: 1px solid var(--ink); background: transparent; color: var(--ink); padding: 0 18px; cursor: pointer; } .ds-key-reveal button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; } .ds-key-reveal p { margin: 0; font-size: 13px; }"
+    },
+    {
+      "name": "Download Plate",
+      "kind": "custom",
+      "refersTo": "download-plate",
+      "description": "安装向导中的印章式下载交付面。",
+      "html": "<section class=\"ds-download\"><span class=\"ds-download-mark\">+</span><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\"><path d=\"M12 3v12M7 10l5 5 5-5\"></path><path d=\"M4 19h16\"></path></svg><h2>WorkBuddy 图片 MCP</h2><p>Windows 10 / 11 · x64</p><a href=\"#download\">下载安装包</a><small>Key 会保存在当前 Windows 用户可读的 WorkBuddy 配置中。</small></section>",
+      "css": ".ds-download { background: var(--seal); color: var(--ink); padding: 42px; position: relative; font-family: \"Manrope Variable\", sans-serif; } .ds-download-mark { position: absolute; left: 8px; top: 5px; font-family: \"JetBrains Mono Variable\", monospace; } .ds-download svg { width: 55px; height: 55px; } .ds-download h2 { font-size: 28px; margin: 36px 0 5px; } .ds-download p { margin: 0 0 36px; } .ds-download a { display: inline-flex; width: 100%; justify-content: center; align-items: center; border: 1px solid var(--ink); border-radius: 0; background: var(--ink); color: var(--paper); padding: 14px 20px; margin-bottom: 18px; font-family: \"JetBrains Mono Variable\", monospace; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; text-decoration: none; transition: background .12s, color .12s; } .ds-download a:hover { background: transparent; color: var(--ink); } .ds-download a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; } .ds-download small { font-family: \"JetBrains Mono Variable\", monospace; font-size: 10px; line-height: 1.6; display: block; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "设计年鉴账页 / Design Annual Ledger",
+    "overview": "界面像一本正在使用的设计年鉴账页：暖白纸张承载高密度但可快速核对的信息，墨色文字与细线网格把额度、任务和审核事实排成清楚的账本。淡紫色印章不是装饰性品牌色块，而是只在身份、密钥和下载等关键节点出现的确认痕迹。\n\n整体气质直接、克制、可审计。大号 Manrope 标题给页面明确章节感，JetBrains Mono 负责编号、状态、标签和金额等需要对齐核读的内容；页面不用悬浮卡片制造层次，而以纸色差、边线、栏目和留白建立秩序。",
+    "keyCharacteristics": [
+      "暖白纸张、近黑墨色与低对比灰线构成长期阅读底色。",
+      "淡紫印章色只标记关键交付物与一次性信息。",
+      "方角控件、1px 规则线和账本式分栏保持结构清晰。",
+      "Manrope 承担叙事，JetBrains Mono 承担编号与可核对事实。",
+      "默认扁平无阴影，交互状态通过反相、底色与描边变化表达。"
+    ],
+    "rules": [
+      {
+        "name": "The Seal Sparingly Rule",
+        "body": "淡紫只用于印章、一次性 Key 与下载牌等关键确认面，不扩散成普通卡片底色。",
+        "section": "colors"
+      },
+      {
+        "name": "The State Trio Rule",
+        "body": "每种业务状态同时使用文字色、描边与浅底色，状态含义不得只靠单一颜色表达。",
+        "section": "colors"
+      },
+      {
+        "name": "The Narrative-and-Fact Rule",
+        "body": "Manrope 讲清楚任务，JetBrains Mono 标记可核对事实；不要把整段正文设成等宽字体。",
+        "section": "typography"
+      },
+      {
+        "name": "The Ruled Grid Rule",
+        "body": "优先用网格轨道、栏目边线和连续列表建立关系；只有内容语义确实独立时才拆成单独色块。",
+        "section": "layout"
+      },
+      {
+        "name": "The Ledger-Flat Rule",
+        "body": "静止面保持无阴影；边线、底色和留白必须先承担结构职责。",
+        "section": "elevation"
+      },
+      {
+        "name": "The Semantic Circle Rule",
+        "body": "圆形只表示印章、登记点或旋转进度，不作为通用卡片和按钮轮廓。",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do 用暖白纸面、墨色和 1px 规则线组织高密度账户信息。",
+      "Do 让编号、日期、金额、状态和表头使用 JetBrains Mono 与表格数字特性。",
+      "Do 为状态同时提供文字、描边、底色和可读标签。",
+      "Do 在 900px、700px、600px 和 360px 的既有断点上延续相同的信息优先级。",
+      "Do 把淡紫色保留给印章式确认、一次性密钥和下载交付物。"
+    ],
+    "donts": [
+      "Don't 为普通卡片、按钮或列表加入圆角胶囊轮廓。",
+      "Don't 用投影堆叠台账层级；先使用规则线、纸色差和留白。",
+      "Don't 把成功、失败或待复核只表达为颜色点或无文字图标。",
+      "Don't 让正文、说明或长段落全部使用等宽字体。",
+      "Don't 把淡紫印章色扩散成大面积通用背景或常规悬停色。"
+    ]
+  }
+}

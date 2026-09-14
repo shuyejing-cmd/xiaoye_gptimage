@@ -6,6 +6,8 @@ coverage/
 dist/
 web/dist/
 installer/output/
+installer/stage/
+web/public/downloads/*.exe
 outputs/
 work/
 .runtime/

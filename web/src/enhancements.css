@@ -1,0 +1,33 @@
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 8px;
+  left: 8px;
+  padding: 10px 14px;
+  background: var(--ink);
+  color: var(--paper);
+  transform: translateY(-160%);
+}
+.skip-link:focus { transform: translateY(0); }
+.wordmark { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.content:focus { outline: 0; }
+.loading { min-height: 150px; display: grid; place-items: center; align-content: center; gap: 10px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.loading span { width: 22px; height: 22px; border: 1px solid var(--line); border-top-color: var(--ink); border-radius: 50%; animation: loading-turn .8s linear infinite; }
+.loading p { margin: 0; }
+@keyframes loading-turn { to { transform: rotate(360deg); } }
+.key-reveal .close { width: 44px; height: 44px; right: 0; top: 0; }
+.admin-config { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.admin-config form { display: grid; gap: 14px; padding: 28px; background: var(--paper); }
+.admin-config h3 { margin: 0 0 8px; font-size: 20px; }
+.admin-config label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+.admin-config input { min-width: 0; padding: 11px 12px; border: 1px solid #a8a6a1; border-radius: 0; background: #fbfaf7; color: var(--ink); }
+.admin-config button { justify-self: start; padding: 11px 16px; border: 1px solid var(--ink); border-radius: 0; background: var(--ink); color: white; cursor: pointer; }
+.ops-metrics { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.ops-metrics div { padding: 24px 18px 24px 0; }
+.ops-metrics div + div { border-left: 1px solid var(--line); padding-left: 18px; }
+.ops-metrics span { display: block; color: var(--muted); font-size: 11px; }
+.ops-metrics strong { display: block; margin-top: 8px; font-size: 28px; font-variant-numeric: tabular-nums; }
+button:disabled { cursor: wait; opacity: .5; }
+@media (prefers-reduced-motion: reduce) { .loading span { animation: none; } }
+@media (max-width: 700px) { .admin-config { grid-template-columns: 1fr; } .ops-metrics { grid-template-columns: 1fr 1fr; } .ops-metrics div:nth-child(3) { border-left: 0; } }
+@media (max-width: 360px) { .hero h1 { font-size: 44px; } }

@@ -1,0 +1,5 @@
+@media (max-width: 600px) {
+  .app-shell nav {
+    grid-template-columns: repeat(auto-fit, minmax(52px, 1fr));
+  }
+}
