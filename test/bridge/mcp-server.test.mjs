@@ -14,6 +14,21 @@ test("createBridgeServer exposes generate_image", () => {
   assert.ok(server);
 });
 
+test("bridge exposes generation lookup and balance tools", async () => {
+  const server = createBridgeServer({ allowedRoots: [], gatewayClient: { getGeneration: async (requestId) => ({ request_id: requestId, status: "processing" }), getBalance: async () => ({ available_credits: 5, held_credits: 1 }) } });
+  const client = new Client({ name: "bridge-tools", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const tools = await client.listTools();
+  assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), ["generate_image", "get_balance", "get_generation"]);
+  const generation = await client.callTool({ name: "get_generation", arguments: { request_id: "request-1" } });
+  const balance = await client.callTool({ name: "get_balance", arguments: {} });
+  assert.equal(JSON.parse(generation.content[0].text).status, "processing");
+  assert.equal(JSON.parse(balance.content[0].text).available_credits, 5);
+  await client.close();
+  await server.close();
+});
+
 test("bridge supports the legacy single path and ordered multi-path calls", async () => {
   const root = await mkdtemp(join(tmpdir(), "bridge-mcp-"));
   const one = join(root, "one.png");

@@ -27,5 +27,25 @@ export function createBridgeServer({ allowedRoots, gatewayClient }) {
       return { content: [{ type: "text", text: error instanceof Error ? error.message : "generation failed" }], isError: true };
     }
   });
+  server.registerTool("get_generation", {
+    description: "Get the current status and result for an earlier image generation request.",
+    inputSchema: { request_id: z.string().min(1) }
+  }, async ({ request_id: requestId }) => {
+    try {
+      return { content: [{ type: "text", text: JSON.stringify(await gatewayClient.getGeneration(requestId)) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: error instanceof Error ? error.message : "lookup failed" }], isError: true };
+    }
+  });
+  server.registerTool("get_balance", {
+    description: "Get the available and currently held image generation credits.",
+    inputSchema: {}
+  }, async () => {
+    try {
+      return { content: [{ type: "text", text: JSON.stringify(await gatewayClient.getBalance()) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: error instanceof Error ? error.message : "balance lookup failed" }], isError: true };
+    }
+  });
   return server;
 }
