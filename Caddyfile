@@ -1,5 +1,19 @@
 {$DOMAIN} {
-  reverse_proxy /mcp gateway:3000
-  reverse_proxy /v1/bridge/generations gateway:3000
-  reverse_proxy /healthz gateway:3000
+  encode zstd gzip
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "same-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    Content-Security-Policy "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+  }
+  reverse_proxy /mcp legacy-gateway:3000
+  reverse_proxy api:3000
+  log {
+    output file /data/access.log {
+      roll_size 50MiB
+      roll_keep_for 720h
+    }
+    format json
+  }
 }
