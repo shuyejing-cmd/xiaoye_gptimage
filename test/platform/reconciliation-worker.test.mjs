@@ -104,7 +104,8 @@ test("an unknown COS upload is captured if its deterministic object exists", asy
 });
 
 test("an interrupted submission without an output becomes unknown and is never resubmitted", async () => {
-  const { pool, userId, jobs } = await setup();
+  const now = new Date("2026-09-13T12:00:00Z");
+  const { pool, userId, jobs } = await setup(now);
   const job = await jobs.enqueue({ userId, idempotencyKey: "interrupted-submit", provider: "apimart", request: { prompt: "cat" } });
   await jobs.claimNext();
   await pool.query("update generation_jobs set updated_at='2026-09-13T11:00:00Z' where request_id=$1", [job.requestId]);
@@ -112,7 +113,8 @@ test("an interrupted submission without an output becomes unknown and is never r
   const worker = createReconciliationWorker({
     jobs,
     providers: { apimart: { submit: async () => { submitCalls += 1; } } },
-    outputStore: { findGenerated: async () => null }
+    outputStore: { findGenerated: async () => null },
+    now: () => now
   });
   await worker.runOnce();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });

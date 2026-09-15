@@ -9,7 +9,7 @@ import { createPayloadCipher } from "../../src/platform/security/payload-cipher.
 import { createGenerationJobs } from "../../src/platform/generation/generation-jobs.mjs";
 import { createPlatformApp } from "../../src/platform/http/platform-app.mjs";
 
-async function setup({ publicRegistrationEnabled = true } = {}) {
+async function setup({ publicRegistrationEnabled = true, cookieSecure = true } = {}) {
   const memory = newDb({ autoCreateForeignKeyIndices: true, noAstCoverageCheck: true });
   const { Pool } = memory.adapters.createPg();
   const pool = new Pool();
@@ -19,10 +19,10 @@ async function setup({ publicRegistrationEnabled = true } = {}) {
   let requestId = 0;
   let keySeed = 1;
   const authService = createAuthService({ pool, pepper: "auth", randomCode: () => String(code++), randomToken: () => `token-${code}`, mailer: { sendLoginCode: async (value) => sent.push(value) } });
-  const apiKeyService = createApiKeyService({ pool, pepper: "keys", randomBytes: () => Buffer.alloc(24, keySeed++) });
+  const apiKeyService = createApiKeyService({ pool, pepper: "keys", cipher: createPayloadCipher({ key: Buffer.alloc(32, 7) }), randomBytes: () => Buffer.alloc(24, keySeed++) });
   const walletService = createWalletService({ pool });
   const generationJobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: Buffer.alloc(32, 4) }), requestIdFactory: () => `api-${++requestId}` });
-  const app = createPlatformApp({ pool, authService, apiKeyService, walletService, generationJobs, temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) }, publicRegistrationEnabled, readyCheck: async () => true });
+  const app = createPlatformApp({ pool, authService, apiKeyService, walletService, generationJobs, temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) }, publicRegistrationEnabled, cookieSecure, readyCheck: async () => true });
   return { pool, app, sent };
 }
 
@@ -49,6 +49,16 @@ test("email login creates a secure website session and exposes the wallet", asyn
   assert.equal(me.statusCode, 200);
   assert.equal(me.json().user.email, "web@example.com");
   assert.deepEqual(me.json().wallet, { available_credits: 5, held_credits: 0 });
+  await app.close();
+  await pool.end();
+});
+
+test("local HTTP login can omit the Secure cookie attribute when explicitly configured", async () => {
+  const { pool, app, sent } = await setup({ cookieSecure: false });
+  await app.inject({ method: "POST", url: "/api/auth/email-code", payload: { email: "local@example.com", device_id: "local-browser" } });
+  const response = await app.inject({ method: "POST", url: "/api/auth/verify", payload: { email: "local@example.com", code: sent.at(-1).code, device_id: "local-browser" } });
+  assert.equal(response.statusCode, 200);
+  assert.doesNotMatch(response.headers["set-cookie"], /;\s*Secure/i);
   await app.close();
   await pool.end();
 });
@@ -80,6 +90,18 @@ test("personal API key creates one idempotent billed job", async () => {
   assert.equal(duplicate.json().request_id, first.json().request_id);
   const balance = await app.inject({ method: "GET", url: "/v1/account/balance", headers: { authorization: `Bearer ${key}` } });
   assert.deepEqual(balance.json(), { available_credits: 4, held_credits: 1 });
+  await app.close();
+  await pool.end();
+});
+
+test("an authenticated owner can reload a complete key without cache storage", async () => {
+  const { pool, app, sent } = await setup();
+  const owner = await login(app, sent, "persistent-key@example.com", "persistent-key-browser");
+  const created = await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name: "Persistent" } });
+  const listed = await app.inject({ method: "GET", url: "/api/api-keys", headers: { cookie: owner.cookie } });
+  assert.equal(listed.statusCode, 200);
+  assert.equal(listed.headers["cache-control"], "no-store");
+  assert.equal(listed.json().keys[0].key, created.json().key);
   await app.close();
   await pool.end();
 });

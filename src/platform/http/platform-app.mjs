@@ -46,6 +46,7 @@ export function createPlatformApp({
   readyCheck = async () => true,
   generationAdmissionCheck = async () => true,
   publicRegistrationEnabled = false,
+  cookieSecure = true,
   provider = "gpt-ge",
   logger = false
 }) {
@@ -110,7 +111,7 @@ export function createPlatformApp({
 
   app.post("/api/auth/verify", async (request, reply) => {
     const result = await authService.verifyCode({ email: request.body?.email, code: request.body?.code, deviceId: request.body?.device_id, ip: clientIp(request) });
-    reply.setCookie(COOKIE_NAME, result.sessionToken, { path: "/", httpOnly: true, secure: true, sameSite: "lax", maxAge: 30 * 24 * 60 * 60 });
+    reply.setCookie(COOKIE_NAME, result.sessionToken, { path: "/", httpOnly: true, secure: cookieSecure, sameSite: "lax", maxAge: 30 * 24 * 60 * 60 });
     return { user: result.user, wallet: walletBody(result.wallet) };
   });
 
@@ -136,8 +137,14 @@ export function createPlatformApp({
     return { generations: rows.rows };
   });
 
-  app.get("/api/api-keys", async (request) => ({ keys: await apiKeyService.list((await websiteUser(request)).id) }));
-  app.post("/api/api-keys", async (request, reply) => reply.code(201).send(await apiKeyService.create({ userId: (await websiteUser(request)).id, name: request.body?.name })));
+  app.get("/api/api-keys", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return { keys: await apiKeyService.list((await websiteUser(request)).id) };
+  });
+  app.post("/api/api-keys", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return reply.code(201).send(await apiKeyService.create({ userId: (await websiteUser(request)).id, name: request.body?.name }));
+  });
   app.delete("/api/api-keys/:id", async (request) => apiKeyService.revoke({ userId: (await websiteUser(request)).id, keyId: request.params.id }));
 
   app.get("/api/recharge-packages", async () => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { formatWorkBuddyMcpConfig } from "./mcp-config.js";
 
 async function api(path, options = {}) {
   const response = await fetch(path, { credentials: "same-origin", ...options, headers: options.body instanceof FormData ? options.headers : { "content-type": "application/json", ...options.headers } });
@@ -81,19 +82,21 @@ function Overview({ me }) {
 }
 
 function Keys() {
-  const [keys, setKeys] = useState([]), [created, setCreated] = useState(""), [error, setError] = useState(""), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [copyState, setCopyState] = useState("");
-  const revealRef = useRef(null);
+  const [keys, setKeys] = useState([]), [error, setError] = useState(""), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [copyState, setCopyState] = useState({});
   const load = useCallback(() => api("/api/api-keys").then(x => setKeys(x.keys)).finally(()=>setLoading(false)), []);
   useEffect(() => { load().catch(e => setError(e.message)); }, [load]);
-  useEffect(() => { if (created) revealRef.current?.focus(); }, [created]);
-  const create = async () => { setBusy(true); setError(""); try { const result = await api("/api/api-keys", { method:"POST", body: JSON.stringify({ name:"WorkBuddy Windows" }) }); setCreated(result.key); await load(); } catch(e) { setError(e.message); } finally { setBusy(false); } };
+  const create = async () => { setBusy(true); setError(""); try { await api("/api/api-keys", { method:"POST", body: JSON.stringify({ name:"WorkBuddy Windows" }) }); await load(); } catch(e) { setError(e.message); } finally { setBusy(false); } };
   const revoke = async id => { if (!confirm("撤销后使用此 Key 的 WorkBuddy 会立即失去访问权限。继续吗？")) return; setBusy(true); try { await api(`/api/api-keys/${id}`, { method:"DELETE" }); await load(); } catch(e){setError(e.message)} finally {setBusy(false)} };
-  const copy = async () => { try { await navigator.clipboard.writeText(created); setCopyState("已复制到剪贴板"); } catch { setCopyState("复制失败，请手动选择 Key"); } };
-  return <section className="page"><header className="page-head"><h1>个人 MCP Key</h1><p>每位用户最多保留 3 个有效 Key。完整 Key 只在创建时显示一次。</p></header>
-    {created && <div className="key-reveal" ref={revealRef} tabIndex="-1" role="status" aria-live="polite"><b>现在复制并妥善保存</b><code>{created}</code><button onClick={copy}>复制 Key</button><p>不要把 Key 发到聊天、邮件或截图中。关闭这条提示后无法再次查看。{copyState && ` ${copyState}`}</p><button className="close" onClick={() => {setCreated("");setCopyState("")}} aria-label="关闭一次性 Key 提示">×</button></div>}
+  const copy = async (id, type, value) => { try { await navigator.clipboard.writeText(value); setCopyState({ id, type, message: type === "config" ? "完整配置已复制" : "Key 已复制" }); } catch { setCopyState({ id, type, message: "复制失败，请手动选择内容" }); } };
+  return <section className="page"><header className="page-head"><h1>个人 MCP Key</h1><p>每位用户最多保留 3 个有效 Key。登录后可随时复制完整 Key 和 WorkBuddy 配置。</p></header>
     <div className="toolbar"><button className="primary" onClick={create} disabled={busy}>{busy ? "正在处理…" : "创建新 Key"}</button><span>{keys.filter(x=>x.status==="active").length} / 3 个有效</span></div>
     {error && <p className="error" role="alert">{error}</p>}
-    <div className="key-list">{loading ? <Loading/> : keys.length ? keys.map(key => <article key={key.id}><div><h2>{key.name}</h2><code>wb_live_{key.prefix}_••••••••</code></div><div><Status value={key.status}/><small>{key.lastUsedAt ? `最近使用 ${new Date(key.lastUsedAt).toLocaleString("zh-CN")}` : "尚未使用"}</small>{key.status === "active" && <button disabled={busy} className="danger-text" onClick={() => revoke(key.id)}>撤销</button>}</div></article>) : <Empty>还没有 Key。创建后把它粘贴到 Windows 安装器中。</Empty>}</div>
+    <div className="key-list">{loading ? <Loading/> : keys.length ? keys.map(key => {
+      const config = key.key ? formatWorkBuddyMcpConfig(key.key) : "";
+      return <article className="key-entry" key={key.id}><div className="key-entry-head"><div><h2>{key.name}</h2><code className="full-key">{key.key || `wb_live_${key.prefix}_••••••••`}</code></div><div className="key-meta"><Status value={key.status}/><small>{key.lastUsedAt ? `最近使用 ${new Date(key.lastUsedAt).toLocaleString("zh-CN")}` : "尚未使用"}</small>{key.status === "active" && <button disabled={busy} className="danger-text" onClick={() => revoke(key.id)}>撤销</button>}</div></div>
+        {key.key ? <div className="key-delivery"><div className="key-actions"><button onClick={() => copy(key.id, "key", key.key)}>复制 Key</button><button className="primary" onClick={() => copy(key.id, "config", config)}>复制完整配置</button><span aria-live="polite">{copyState.id === key.id ? copyState.message : ""}</span></div><div className="config-heading"><h3>WorkBuddy MCP 完整配置</h3><p>默认读取当前 Windows 用户的 Pictures 目录；安装器使用自定义目录时请用“修复配置”。</p></div><pre tabIndex="0"><code>{config}</code></pre></div> : key.status === "active" ? <p className="key-unrecoverable">这是升级前创建的旧 Key，无法恢复完整内容。请撤销后重新创建。</p> : null}
+      </article>;
+    }) : <Empty>还没有 Key。创建后即可复制完整 WorkBuddy 配置。</Empty>}</div>
   </section>;
 }
 

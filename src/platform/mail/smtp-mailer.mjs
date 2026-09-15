@@ -1,6 +1,15 @@
 import nodemailer from "nodemailer";
 
-export function createSmtpMailer(config, transport = nodemailer.createTransport(config)) {
+export function createSmtpTransportConfig(config) {
+  return {
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    ...(config.user && config.pass ? { auth: { user: config.user, pass: config.pass } } : {})
+  };
+}
+
+export function createSmtpMailer(config, transport = nodemailer.createTransport(createSmtpTransportConfig(config))) {
   return {
     async sendLoginCode({ email, code }) {
       await transport.sendMail({

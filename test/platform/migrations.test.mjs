@@ -20,7 +20,9 @@ test("commercial schema migrations are repeatable and create the required tables
   for (const name of ["users", "sessions", "api_keys", "wallets", "ledger_entries", "credit_holds", "generation_jobs", "payment_channels", "recharge_packages", "recharge_orders", "audit_events"]) {
     assert.equal(names.has(name), true, `missing table ${name}`);
   }
-  assert.equal(Number((await pool.query("select count(*)::int as count from schema_migrations")).rows[0].count), 4);
+  assert.equal(Number((await pool.query("select count(*)::int as count from schema_migrations")).rows[0].count), 5);
+  const keyColumns = await pool.query("select column_name from information_schema.columns where table_name='api_keys'");
+  assert.equal(keyColumns.rows.some((row) => row.column_name === "encrypted_key"), true);
   await pool.end();
 });
 

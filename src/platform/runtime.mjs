@@ -23,7 +23,7 @@ export async function createPlatformRuntime(config) {
   const temporaryStore = createReferenceStore({ ...config.cos, cos });
   const proofStore = createCosProofStore({ bucket: config.cos.bucket, region: config.cos.region, cos });
   const authService = createAuthService({ pool, pepper: config.authPepper, mailer });
-  const apiKeyService = createApiKeyService({ pool, pepper: config.apiKeyPepper });
+  const apiKeyService = createApiKeyService({ pool, pepper: config.apiKeyPepper, cipher: createPayloadCipher({ key: config.apiKeyEncryptionKey }) });
   const walletService = createWalletService({ pool });
   const generationJobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: config.payloadEncryptionKey }), requestIdFactory: randomUUID });
   const paymentService = createPaymentService({ pool, proofStore, orderNoFactory: () => `WB${Date.now()}${randomUUID().slice(0, 8).toUpperCase()}` });

@@ -75,7 +75,7 @@ curl -fsS https://your-domain.example/readyz
 ## 用户如何接入 WorkBuddy
 
 1. 在网站完成邮箱验证，新用户可看到注册赠送额度。
-2. 在“个人 Key”创建 Key；完整值只显示一次，不要发送到聊天或截图中。
+2. 在“个人 Key”创建 Key；登录后可随时查看、复制完整 Key，并一键复制 WorkBuddy MCP JSON 配置。不要把 Key 发送到聊天或截图中。
 3. 下载已签名的 Windows 安装器，粘贴 Key并选择允许读取参考图的目录。
 4. 安装器调用 `/v1/account/balance` 验证 Key，备份 `%USERPROFILE%\.workbuddy\mcp.json`，只合并 `xiaoye-image`，不会覆盖其他 MCP。
 5. 在 WorkBuddy 调用 `generate_image`；任务超过 90 秒时用 `get_generation` 查询，用 `get_balance` 查看可用与冻结额度。

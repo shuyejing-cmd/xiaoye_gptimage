@@ -16,7 +16,7 @@ const app = createPlatformApp({ ...runtime, provider: config.imageProvider, read
   const invalid = await runtime.pool.query("select count(*)::int as count from wallets where available_credits<0 or held_credits<0");
   const unresolved = await runtime.pool.query("select count(*)::int as count from generation_jobs where state in ('unknown','manual_review')");
   return Number(invalid.rows[0].count) === 0 && Number(unresolved.rows[0].count) < 100;
-}, publicRegistrationEnabled: config.publicRegistrationEnabled, logger: true });
+}, publicRegistrationEnabled: config.publicRegistrationEnabled, cookieSecure: config.cookieSecure, logger: true });
 
 const webRoot = resolve("web/dist");
 if (existsSync(webRoot)) {

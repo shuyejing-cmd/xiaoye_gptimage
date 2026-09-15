@@ -182,6 +182,12 @@ const migrations = [
       "create index if not exists payment_proofs_delete_after_idx on payment_proofs(delete_after)",
       "create index if not exists rate_limit_windows_start_idx on rate_limit_windows(window_start)"
     ]
+  },
+  {
+    version: 5,
+    statements: [
+      "alter table api_keys add column if not exists encrypted_key text"
+    ]
   }
 ];
 
