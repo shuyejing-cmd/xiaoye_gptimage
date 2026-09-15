@@ -5,6 +5,7 @@ import { ZodError } from "zod";
 import { parseGenerationRequest } from "../../shared/contracts.mjs";
 import { AppError } from "../../shared/errors.mjs";
 import { withTransaction } from "../db/pool.mjs";
+import { buildWorkBuddyInstallPrompt } from "../installations/install-prompt.mjs";
 
 const COOKIE_NAME = "wb_session";
 const MAX_REFERENCE_BYTES = 4 * 1024 * 1024;
@@ -37,6 +38,7 @@ export function createPlatformApp({
   pool,
   authService,
   apiKeyService,
+  installationTokenService,
   walletService,
   generationJobs,
   paymentService,
@@ -47,6 +49,8 @@ export function createPlatformApp({
   generationAdmissionCheck = async () => true,
   publicRegistrationEnabled = false,
   cookieSecure = true,
+  publicOrigin = "https://xiaoyeai.cn",
+  installerVersion = "1.1.0",
   provider = "gpt-ge",
   logger = false
 }) {
@@ -54,10 +58,11 @@ export function createPlatformApp({
   app.register(cookie);
   app.register(multipart, { limits: { files: 4, fileSize: MAX_PAYMENT_IMAGE_BYTES, parts: 10 } });
 
-  async function websiteUser(request) {
-    const session = await authService.authenticateSession(request.cookies[COOKIE_NAME]);
-    return session.user;
+  async function websiteSession(request) {
+    return authService.authenticateSession(request.cookies[COOKIE_NAME]);
   }
+
+  async function websiteUser(request) { return (await websiteSession(request)).user; }
 
   async function keyUser(request) {
     return apiKeyService.authenticate(bearer(request));
@@ -146,6 +151,25 @@ export function createPlatformApp({
     return reply.code(201).send(await apiKeyService.create({ userId: (await websiteUser(request)).id, name: request.body?.name }));
   });
   app.delete("/api/api-keys/:id", async (request) => apiKeyService.revoke({ userId: (await websiteUser(request)).id, keyId: request.params.id }));
+
+  app.post("/api/api-keys/:id/installation-token", async (request, reply) => {
+    if (!installationTokenService) throw new AppError({ code: "installations_unavailable", message: "自动安装服务暂不可用", httpStatus: 503 });
+    const session = await websiteSession(request);
+    if (rateLimiter) await rateLimiter.consume({ scope: "installation_token", subject: String(session.user.id), limit: 3, windowMs: 60_000 });
+    const issued = await installationTokenService.create({ userId: session.user.id, sessionId: session.sessionId, apiKeyId: request.params.id });
+    reply.header("Cache-Control", "no-store");
+    return reply.code(201).send({
+      prompt: buildWorkBuddyInstallPrompt({ installationToken: issued.token, version: installerVersion, origin: publicOrigin }),
+      expires_at: issued.expiresAt
+    });
+  });
+
+  app.post("/v1/installations/exchange", async (request, reply) => {
+    if (!installationTokenService) throw new AppError({ code: "installations_unavailable", message: "自动安装服务暂不可用", httpStatus: 503 });
+    const exchanged = await installationTokenService.exchange(request.body?.installation_token);
+    reply.header("Cache-Control", "no-store");
+    return { api_key: exchanged.apiKey, gateway_url: publicOrigin };
+  });
 
   app.get("/api/recharge-packages", async () => {
     const rows = await pool.query("select id,name,price_fen,credits from recharge_packages where active=true order by sort_order,id");

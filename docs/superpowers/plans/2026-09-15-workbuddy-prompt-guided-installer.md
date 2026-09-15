@@ -140,7 +140,7 @@ git commit -m "feat: add single-use installation tokens"
 - Modify: `test/platform/platform-app.test.mjs`
 - Create: `test/platform/install-prompt.test.mjs`
 
-- [ ] **Step 1: Write failing prompt-format tests**
+- [x] **Step 1: Write failing prompt-format tests**
 
 Define the exact formatter contract:
 
@@ -158,7 +158,7 @@ assert.doesNotMatch(prompt, /wb_live_/);
 
 The text must tell WorkBuddy to create a current-user-only temporary token file, download the fixed bootstrap version, run it with `-TokenFile`, show its result unchanged, and fall back to `/downloads/WorkBuddy-Image-MCP-Setup.exe` when local command execution is unavailable.
 
-- [ ] **Step 2: Write failing API tests**
+- [x] **Step 2: Write failing API tests**
 
 Extend the platform fixture with the token service. Assert:
 
@@ -178,7 +178,7 @@ POST /v1/installations/exchange
 
 Call the first endpoint four times inside one minute and assert the fourth is `429 rate_limited`; network retry is not automatically repeated because each successful creation deliberately creates a new installation code.
 
-- [ ] **Step 3: Run the focused tests and confirm RED**
+- [x] **Step 3: Run the focused tests and confirm RED**
 
 ```powershell
 node --test --test-isolation=none test/platform/install-prompt.test.mjs test/platform/platform-app.test.mjs
@@ -186,7 +186,7 @@ node --test --test-isolation=none test/platform/install-prompt.test.mjs test/pla
 
 Expected: FAIL with missing formatter and routes.
 
-- [ ] **Step 4: Implement the prompt formatter and routes**
+- [x] **Step 4: Implement the prompt formatter and routes**
 
 Keep `install-prompt.mjs` pure. Add `installationTokenService` to the runtime and platform app dependencies. The website route must authenticate once and retain both values returned by `authService.authenticateSession`:
 
@@ -207,11 +207,11 @@ return reply.code(201).send({
 
 Pass `publicOrigin` and `installerVersion` from `src/platform/config.mjs` through `src/platform/index.mjs` into `createPlatformApp`. The exchange route accepts `{ installation_token }`, never accepts a Key ID, and returns `{ api_key, gateway_url: publicOrigin }` only after the token service transaction commits.
 
-- [ ] **Step 5: Verify logout invalidation and safe logging**
+- [x] **Step 5: Verify logout invalidation and safe logging**
 
 Create a token, call `/api/auth/logout`, and assert exchange returns `invalid_session`. Capture Fastify logs for invalid exchange and assert they contain neither `wb_install_` nor `wb_live_`.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run the Step 3 command plus `test/platform/auth-service.test.mjs`. Expected: PASS.
 

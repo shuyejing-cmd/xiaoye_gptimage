@@ -14,6 +14,7 @@ import { createSmtpMailer } from "./mail/smtp-mailer.mjs";
 import { createReferenceStore } from "../gateway/cos-reference-store.mjs";
 import { createGptGeClient } from "../gateway/gpt-ge-client.mjs";
 import { createApimartClient } from "../gateway/apimart-client.mjs";
+import { createInstallationTokenService } from "./installations/installation-token-service.mjs";
 
 export async function createPlatformRuntime(config) {
   const pool = createPool({ connectionString: config.databaseUrl });
@@ -24,12 +25,13 @@ export async function createPlatformRuntime(config) {
   const proofStore = createCosProofStore({ bucket: config.cos.bucket, region: config.cos.region, cos });
   const authService = createAuthService({ pool, pepper: config.authPepper, mailer });
   const apiKeyService = createApiKeyService({ pool, pepper: config.apiKeyPepper, cipher: createPayloadCipher({ key: config.apiKeyEncryptionKey }) });
+  const installationTokenService = createInstallationTokenService({ pool, pepper: config.installationTokenPepper, apiKeyService });
   const walletService = createWalletService({ pool });
   const generationJobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: config.payloadEncryptionKey }), requestIdFactory: randomUUID });
   const paymentService = createPaymentService({ pool, proofStore, orderNoFactory: () => `WB${Date.now()}${randomUUID().slice(0, 8).toUpperCase()}` });
   const provider = config.imageProvider === "gpt_ge" ? createGptGeClient(config.gptGe) : createApimartClient(config.apimart);
   if (config.imageProvider === "apimart") provider.mode = "asynchronous";
-  return { pool, mailer, temporaryStore, proofStore, authService, apiKeyService, walletService, generationJobs, paymentService, rateLimiter: createRateLimiter({ pool }), provider };
+  return { pool, mailer, temporaryStore, proofStore, authService, apiKeyService, installationTokenService, walletService, generationJobs, paymentService, rateLimiter: createRateLimiter({ pool }), provider };
 }
 
 export async function ensureBootstrapAdmin({ pool, apiKeyService, email, legacyGatewayToken }) {

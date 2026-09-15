@@ -7,6 +7,8 @@ import { createApiKeyService } from "../../src/platform/auth/api-key-service.mjs
 import { createWalletService } from "../../src/platform/billing/wallet-service.mjs";
 import { createPayloadCipher } from "../../src/platform/security/payload-cipher.mjs";
 import { createGenerationJobs } from "../../src/platform/generation/generation-jobs.mjs";
+import { createInstallationTokenService } from "../../src/platform/installations/installation-token-service.mjs";
+import { createRateLimiter } from "../../src/platform/http/rate-limiter.mjs";
 import { createPlatformApp } from "../../src/platform/http/platform-app.mjs";
 
 async function setup({ publicRegistrationEnabled = true, cookieSecure = true } = {}) {
@@ -18,11 +20,13 @@ async function setup({ publicRegistrationEnabled = true, cookieSecure = true } =
   let code = 200000;
   let requestId = 0;
   let keySeed = 1;
+  let tokenSeed = 20;
   const authService = createAuthService({ pool, pepper: "auth", randomCode: () => String(code++), randomToken: () => `token-${code}`, mailer: { sendLoginCode: async (value) => sent.push(value) } });
   const apiKeyService = createApiKeyService({ pool, pepper: "keys", cipher: createPayloadCipher({ key: Buffer.alloc(32, 7) }), randomBytes: () => Buffer.alloc(24, keySeed++) });
   const walletService = createWalletService({ pool });
   const generationJobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: Buffer.alloc(32, 4) }), requestIdFactory: () => `api-${++requestId}` });
-  const app = createPlatformApp({ pool, authService, apiKeyService, walletService, generationJobs, temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) }, publicRegistrationEnabled, cookieSecure, readyCheck: async () => true });
+  const installationTokenService = createInstallationTokenService({ pool, pepper: "installation-tokens", apiKeyService, randomBytes: () => Buffer.alloc(24, tokenSeed++) });
+  const app = createPlatformApp({ pool, authService, apiKeyService, installationTokenService, walletService, generationJobs, rateLimiter: createRateLimiter({ pool }), temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) }, publicRegistrationEnabled, cookieSecure, publicOrigin: "https://xiaoyeai.cn", installerVersion: "1.1.0", readyCheck: async () => true });
   return { pool, app, sent };
 }
 
@@ -102,6 +106,62 @@ test("an authenticated owner can reload a complete key without cache storage", a
   assert.equal(listed.statusCode, 200);
   assert.equal(listed.headers["cache-control"], "no-store");
   assert.equal(listed.json().keys[0].key, created.json().key);
+  await app.close();
+  await pool.end();
+});
+
+test("an owner can issue a prompt and exchange its one-time installation token", async () => {
+  const { pool, app, sent } = await setup();
+  const owner = await login(app, sent, "installer-owner@example.com", "installer-owner-browser");
+  const other = await login(app, sent, "installer-other@example.com", "installer-other-browser");
+  const created = await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name: "Installer" } });
+
+  assert.equal((await app.inject({ method: "POST", url: `/api/api-keys/${created.json().id}/installation-token` })).statusCode, 401);
+  const hidden = await app.inject({ method: "POST", url: `/api/api-keys/${created.json().id}/installation-token`, headers: { cookie: other.cookie } });
+  assert.equal(hidden.statusCode, 401);
+  assert.equal(hidden.json().error.code, "api_key_invalid");
+
+  const issued = await app.inject({ method: "POST", url: `/api/api-keys/${created.json().id}/installation-token`, headers: { cookie: owner.cookie } });
+  assert.equal(issued.statusCode, 201);
+  assert.equal(issued.headers["cache-control"], "no-store");
+  assert.match(issued.json().prompt, /wb_install_/);
+  assert.doesNotMatch(issued.json().prompt, /wb_live_/);
+  const token = issued.json().prompt.match(/wb_install_[A-Za-z0-9_-]+_[A-Za-z0-9_-]+/)[0];
+
+  const exchanged = await app.inject({ method: "POST", url: "/v1/installations/exchange", payload: { installation_token: token } });
+  assert.equal(exchanged.statusCode, 200);
+  assert.equal(exchanged.headers["cache-control"], "no-store");
+  assert.equal(exchanged.json().api_key, created.json().key);
+  assert.equal(exchanged.json().gateway_url, "https://xiaoyeai.cn");
+  const repeated = await app.inject({ method: "POST", url: "/v1/installations/exchange", payload: { installation_token: token } });
+  assert.equal(repeated.statusCode, 409);
+  assert.equal(repeated.json().error.code, "installation_token_used");
+  await app.close();
+  await pool.end();
+});
+
+test("installation prompt issuance is limited to three requests per user per minute", async () => {
+  const { pool, app, sent } = await setup();
+  const owner = await login(app, sent, "installer-limit@example.com", "installer-limit-browser");
+  const created = await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name: "Installer" } });
+  const responses = [];
+  for (let index = 0; index < 4; index += 1) responses.push(await app.inject({ method: "POST", url: `/api/api-keys/${created.json().id}/installation-token`, headers: { cookie: owner.cookie } }));
+  assert.deepEqual(responses.map((response) => response.statusCode), [201, 201, 201, 429]);
+  assert.equal(responses[3].json().error.code, "rate_limit_exceeded");
+  await app.close();
+  await pool.end();
+});
+
+test("logging out invalidates an installation token", async () => {
+  const { pool, app, sent } = await setup();
+  const owner = await login(app, sent, "installer-logout@example.com", "installer-logout-browser");
+  const created = await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name: "Installer" } });
+  const issued = await app.inject({ method: "POST", url: `/api/api-keys/${created.json().id}/installation-token`, headers: { cookie: owner.cookie } });
+  const token = issued.json().prompt.match(/wb_install_[A-Za-z0-9_-]+_[A-Za-z0-9_-]+/)[0];
+  await app.inject({ method: "POST", url: "/api/auth/logout", headers: { cookie: owner.cookie } });
+  const exchanged = await app.inject({ method: "POST", url: "/v1/installations/exchange", payload: { installation_token: token } });
+  assert.equal(exchanged.statusCode, 401);
+  assert.equal(exchanged.json().error.code, "invalid_session");
   await app.close();
   await pool.end();
 });
