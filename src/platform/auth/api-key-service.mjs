@@ -69,6 +69,13 @@ export function createApiKeyService({ pool, pepper, cipher, randomBytes = crypto
       return { keyId: row.id, userId: row.user_id, role: row.role, status: row.user_status };
     },
 
+    async resolveActiveForInstallation({ userId, keyId, client = pool }) {
+      const result = await client.query("select * from api_keys where id=$1 and user_id=$2 and status='active'", [keyId, userId]);
+      const key = result.rows[0] && revealedKey(result.rows[0], cipher);
+      if (!key) throw new AppError({ code: "api_key_invalid", message: "个人 Key 已撤销或无法读取", httpStatus: 401 });
+      return key;
+    },
+
     async importLegacy({ userId, rawKey, name = "Legacy WorkBuddy" }) {
       const prefix = hashKey(pepper, rawKey).slice(0, 8);
       const existing = await pool.query("select * from api_keys where key_hash=$1", [hashKey(pepper, rawKey)]);

@@ -188,6 +188,23 @@ const migrations = [
     statements: [
       "alter table api_keys add column if not exists encrypted_key text"
     ]
+  },
+  {
+    version: 6,
+    statements: [
+      `create table if not exists installation_tokens (
+        id bigserial primary key,
+        user_id bigint not null references users(id),
+        api_key_id bigint not null references api_keys(id),
+        session_id text not null references sessions(id),
+        token_prefix text not null unique,
+        token_hash text not null unique,
+        expires_at timestamptz not null,
+        consumed_at timestamptz,
+        created_at timestamptz not null default now()
+      )`,
+      "create index if not exists installation_tokens_active_user_idx on installation_tokens(user_id,expires_at) where consumed_at is null"
+    ]
   }
 ];
 

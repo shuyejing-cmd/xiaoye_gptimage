@@ -11,20 +11,29 @@ function encryptionKey(value, name) {
 }
 
 export function loadPlatformConfig(env = process.env) {
-  requireValues(env, ["DATABASE_URL", "AUTH_PEPPER", "API_KEY_PEPPER", "API_KEY_ENCRYPTION_KEY", "PAYLOAD_ENCRYPTION_KEY", "COS_SECRET_ID", "COS_SECRET_KEY", "COS_BUCKET", "COS_REGION", "SMTP_HOST", "SMTP_FROM"]);
+  requireValues(env, ["DATABASE_URL", "AUTH_PEPPER", "API_KEY_PEPPER", "INSTALLATION_TOKEN_PEPPER", "API_KEY_ENCRYPTION_KEY", "PAYLOAD_ENCRYPTION_KEY", "COS_SECRET_ID", "COS_SECRET_KEY", "COS_BUCKET", "COS_REGION", "SMTP_HOST", "SMTP_FROM"]);
   const imageProvider = env.IMAGE_PROVIDER || "gpt_ge";
   if (!new Set(["gpt_ge", "apimart"]).has(imageProvider)) throw new AppError({ code: "invalid_config", message: "IMAGE_PROVIDER must be gpt_ge or apimart", httpStatus: 500 });
   requireValues(env, [imageProvider === "gpt_ge" ? "GPT_GE_API_KEY" : "APIMART_API_KEY"]);
+  const publicOrigin = env.PUBLIC_ORIGIN || "https://xiaoyeai.cn";
+  const installerVersion = env.WORKBUDDY_INSTALLER_VERSION || "1.1.0";
+  let originUrl;
+  try { originUrl = new URL(publicOrigin); } catch { /* validated below */ }
+  if (!originUrl || originUrl.protocol !== "https:") throw new AppError({ code: "invalid_config", message: "PUBLIC_ORIGIN must be an HTTPS origin", httpStatus: 500 });
+  if (!/^\d+\.\d+\.\d+$/.test(installerVersion)) throw new AppError({ code: "invalid_config", message: "WORKBUDDY_INSTALLER_VERSION must use major.minor.patch", httpStatus: 500 });
   return {
     databaseUrl: env.DATABASE_URL,
     authPepper: env.AUTH_PEPPER,
     apiKeyPepper: env.API_KEY_PEPPER,
+    installationTokenPepper: env.INSTALLATION_TOKEN_PEPPER,
     apiKeyEncryptionKey: encryptionKey(env.API_KEY_ENCRYPTION_KEY, "API_KEY_ENCRYPTION_KEY"),
     payloadEncryptionKey: encryptionKey(env.PAYLOAD_ENCRYPTION_KEY, "PAYLOAD_ENCRYPTION_KEY"),
     imageProvider,
     providerConcurrency: Math.max(1, Number(env.WORKER_CONCURRENCY || 2)),
     publicRegistrationEnabled: env.PUBLIC_REGISTRATION_ENABLED === "true",
     cookieSecure: env.COOKIE_SECURE !== "false",
+    publicOrigin: originUrl.origin,
+    installerVersion,
     port: Number(env.PORT || 3000),
     cos: { secretId: env.COS_SECRET_ID, secretKey: env.COS_SECRET_KEY, bucket: env.COS_BUCKET, region: env.COS_REGION, prefix: env.COS_PREFIX || "private/workbuddy-images" },
     gptGe: { apiKey: env.GPT_GE_API_KEY, baseUrl: env.GPT_GE_BASE_URL || "https://api.gpt.ge/v1" },

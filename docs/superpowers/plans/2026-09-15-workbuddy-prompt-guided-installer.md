@@ -22,7 +22,7 @@
 - Test: `test/platform/platform-config.test.mjs`
 - Create: `test/platform/installation-token-service.test.mjs`
 
-- [ ] **Step 1: Write the failing migration and configuration tests**
+- [x] **Step 1: Write the failing migration and configuration tests**
 
 Extend the migration assertion to expect schema version 6 and this table shape:
 
@@ -43,7 +43,7 @@ create table installation_tokens (
 Add `INSTALLATION_TOKEN_PEPPER` to the complete configuration fixture and assert that missing it raises `missing_config`.
 Also expose `publicOrigin` from `PUBLIC_ORIGIN` (default `https://xiaoyeai.cn`) and `installerVersion` from `WORKBUDDY_INSTALLER_VERSION` (default `1.1.0`), rejecting a non-HTTPS production origin or a version outside `major.minor.patch` format.
 
-- [ ] **Step 2: Write failing service tests for lifecycle and concurrency**
+- [x] **Step 2: Write failing service tests for lifecycle and concurrency**
 
 Create fixtures with one active user, website session, wallet, and encrypted API Key. Cover:
 
@@ -61,7 +61,7 @@ assert.equal(results.find((result) => result.status === "fulfilled").value.apiKe
 
 Also assert `installation_token_expired`, `installation_token_used`, `api_key_invalid`, and `invalid_session` for an expired token, a second exchange, a revoked target Key, a revoked creating session, and a suspended account. Assert that a sixth unexpired token returns `installation_token_limit_reached`.
 
-- [ ] **Step 3: Run the new tests and confirm RED**
+- [x] **Step 3: Run the new tests and confirm RED**
 
 Run:
 
@@ -71,7 +71,7 @@ node --test --test-isolation=none test/platform/migrations.test.mjs test/platfor
 
 Expected: FAIL because migration 6, `INSTALLATION_TOKEN_PEPPER`, and the service do not exist.
 
-- [ ] **Step 4: Add migration 6 and the independent pepper**
+- [x] **Step 4: Add migration 6 and the independent pepper**
 
 Add the table above plus:
 
@@ -89,7 +89,7 @@ PUBLIC_ORIGIN=https://xiaoyeai.cn
 WORKBUDDY_INSTALLER_VERSION=1.1.0
 ```
 
-- [ ] **Step 5: Add an API-key resolver for the installation transaction**
+- [x] **Step 5: Add an API-key resolver for the installation transaction**
 
 Expose a method on `createApiKeyService` that can use an existing PostgreSQL client:
 
@@ -105,7 +105,7 @@ async resolveActiveForInstallation({ userId, keyId, client = pool }) {
 }
 ```
 
-- [ ] **Step 6: Implement the installation-token service**
+- [x] **Step 6: Implement the installation-token service**
 
 Use HMAC-SHA256 with `installationTokenPepper`, 24 random bytes encoded as Base64URL, a 10-minute TTL, row locking during exchange, and the existing `withTransaction` helper. The public interface must be:
 
@@ -121,7 +121,7 @@ createInstallationTokenService({ pool, pepper, apiKeyService, now, randomBytes }
 
 `exchange` must select the matching token row `for update`, validate expiry and `consumed_at`, join and validate the creating session, user, and API Key, set `consumed_at` before commit, and insert `exchange_installation_token` in `audit_events`. No error or audit metadata may include either token or API Key.
 
-- [ ] **Step 7: Run focused tests and commit**
+- [x] **Step 7: Run focused tests and commit**
 
 Run the Step 3 command. Expected: all tests PASS.
 
