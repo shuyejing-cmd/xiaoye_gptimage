@@ -11,3 +11,4 @@ web/public/downloads/*.exe
 outputs/
 work/
 .runtime/
+.worktrees/
