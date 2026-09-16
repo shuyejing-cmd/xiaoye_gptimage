@@ -205,6 +205,12 @@ const migrations = [
       )`,
       "create index if not exists installation_tokens_active_user_idx on installation_tokens(user_id,expires_at) where consumed_at is null"
     ]
+  },
+  {
+    version: 7,
+    statements: [
+      "alter table api_keys add column if not exists deleted_at timestamptz"
+    ]
   }
 ];
 
