@@ -110,6 +110,36 @@ test("an authenticated owner can reload a complete key without cache storage", a
   await pool.end();
 });
 
+test("an owner can idempotently delete a key and create a replacement", async () => {
+  const { pool, app, sent } = await setup();
+  const owner = await login(app, sent, "delete-owner@example.com", "delete-owner-browser");
+  const other = await login(app, sent, "delete-other@example.com", "delete-other-browser");
+  const created = [];
+  for (const name of ["one", "two", "three"]) {
+    const response = await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name } });
+    assert.equal(response.statusCode, 201);
+    created.push(response.json());
+  }
+
+  const hidden = await app.inject({ method: "DELETE", url: `/api/api-keys/${created[0].id}`, headers: { cookie: other.cookie } });
+  assert.equal(hidden.statusCode, 404);
+  assert.equal(hidden.json().error.code, "api_key_not_found");
+
+  const firstDelete = await app.inject({ method: "DELETE", url: `/api/api-keys/${created[0].id}`, headers: { cookie: owner.cookie } });
+  const repeatedDelete = await app.inject({ method: "DELETE", url: `/api/api-keys/${created[0].id}`, headers: { cookie: owner.cookie } });
+  assert.equal(firstDelete.statusCode, 200);
+  assert.deepEqual(firstDelete.json(), { id: created[0].id, deleted: true });
+  assert.equal(repeatedDelete.statusCode, 200);
+  assert.deepEqual(repeatedDelete.json(), { id: created[0].id, deleted: true });
+
+  const listed = await app.inject({ method: "GET", url: "/api/api-keys", headers: { cookie: owner.cookie } });
+  assert.equal(listed.json().keys.some((key) => key.id === created[0].id), false);
+  const replacement = await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name: "replacement" } });
+  assert.equal(replacement.statusCode, 201);
+  await app.close();
+  await pool.end();
+});
+
 test("an owner can issue a prompt and exchange its one-time installation token", async () => {
   const { pool, app, sent } = await setup();
   const owner = await login(app, sent, "installer-owner@example.com", "installer-owner-browser");

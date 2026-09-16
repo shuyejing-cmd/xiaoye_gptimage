@@ -86,7 +86,7 @@ function Keys() {
   const load = useCallback(() => api("/api/api-keys").then(x => setKeys(x.keys)).finally(()=>setLoading(false)), []);
   useEffect(() => { load().catch(e => setError(e.message)); }, [load]);
   const create = async () => { setBusy(true); setError(""); try { await api("/api/api-keys", { method:"POST", body: JSON.stringify({ name:"WorkBuddy Windows" }) }); await load(); } catch(e) { setError(e.message); } finally { setBusy(false); } };
-  const revoke = async id => { if (!confirm("撤销后使用此 Key 的 WorkBuddy 会立即失去访问权限。继续吗？")) return; setBusy(true); try { await api(`/api/api-keys/${id}`, { method:"DELETE" }); await load(); } catch(e){setError(e.message)} finally {setBusy(false)} };
+  const deleteKey = async id => { if (!confirm("删除后此 Key 会立即失效，使用它的 WorkBuddy 将无法继续访问。继续吗？")) return; setBusy(true); setError(""); try { await api(`/api/api-keys/${id}`, { method:"DELETE" }); await load(); } catch(e){setError(e.message)} finally {setBusy(false)} };
   const copy = async (id, type, value) => { try { await navigator.clipboard.writeText(value); setCopyState({ id, type, message: type === "config" ? "完整配置已复制" : "Key 已复制" }); } catch { setCopyState({ id, type, message: "复制失败，请手动选择内容" }); } };
   const issuePrompt = async (key) => {
     setIssuing(key.id); setError(""); setPromptFallback(null);
@@ -103,7 +103,7 @@ function Keys() {
     {error && <p className="error" role="alert">{error}</p>}
     <div className="key-list">{loading ? <Loading/> : keys.length ? keys.map(key => {
       const config = key.key ? formatWorkBuddyMcpConfig(key.key) : "";
-      return <article className="key-entry" key={key.id}><div className="key-entry-head"><div><h2>{key.name}</h2><code className="full-key">{key.key || `wb_live_${key.prefix}_••••••••`}</code></div><div className="key-meta"><Status value={key.status}/><small>{key.lastUsedAt ? `最近使用 ${new Date(key.lastUsedAt).toLocaleString("zh-CN")}` : "尚未使用"}</small>{key.status === "active" && <button disabled={busy} className="danger-text" onClick={() => revoke(key.id)}>撤销</button>}</div></div>
+      return <article className="key-entry" key={key.id}><div className="key-entry-head"><div><h2>{key.name}</h2><code className="full-key">{key.key || `wb_live_${key.prefix}_••••••••`}</code></div><div className="key-meta"><Status value={key.status}/><small>{key.lastUsedAt ? `最近使用 ${new Date(key.lastUsedAt).toLocaleString("zh-CN")}` : "尚未使用"}</small>{key.status === "active" && <button disabled={busy} className="danger-text" onClick={() => deleteKey(key.id)}>删除</button>}</div></div>
         {key.key ? <div className="key-delivery"><div className="key-actions"><button className="primary" disabled={issuing === key.id} onClick={() => issuePrompt(key)}>{issuing === key.id ? "正在生成…" : "复制安装提示词"}</button><a href="/downloads/WorkBuddy-Image-MCP-Setup.exe">下载安装器</a><button onClick={() => copy(key.id, "config", config)}>复制完整配置</button><button onClick={() => copy(key.id, "key", key.key)}>复制 Key</button><span aria-live="polite">{copyState.id === key.id ? copyState.message : ""}</span></div>{promptFallback?.id === key.id && <div className="prompt-fallback"><b>手动复制这段提示词</b><pre tabIndex="0">{promptFallback.prompt}</pre></div>}<div className="config-heading"><h3>WorkBuddy MCP 完整配置</h3><p>这是手动备用方案。正常安装只需复制上方提示词并粘贴给 WorkBuddy。</p></div><pre tabIndex="0"><code>{config}</code></pre></div> : key.status === "active" ? <p className="key-unrecoverable">这是升级前创建的旧 Key，无法恢复完整内容。请撤销后重新创建。</p> : null}
       </article>;
     }) : <Empty>还没有 Key。创建后即可复制完整 WorkBuddy 配置。</Empty>}</div>

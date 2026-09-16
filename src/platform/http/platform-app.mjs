@@ -150,7 +150,7 @@ export function createPlatformApp({
     reply.header("Cache-Control", "no-store");
     return reply.code(201).send(await apiKeyService.create({ userId: (await websiteUser(request)).id, name: request.body?.name }));
   });
-  app.delete("/api/api-keys/:id", async (request) => apiKeyService.revoke({ userId: (await websiteUser(request)).id, keyId: request.params.id }));
+  app.delete("/api/api-keys/:id", async (request) => apiKeyService.delete({ userId: (await websiteUser(request)).id, keyId: request.params.id }));
 
   app.post("/api/api-keys/:id/installation-token", async (request, reply) => {
     if (!installationTokenService) throw new AppError({ code: "installations_unavailable", message: "自动安装服务暂不可用", httpStatus: 503 });
