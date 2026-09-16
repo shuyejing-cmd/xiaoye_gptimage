@@ -82,3 +82,11 @@ test("a user can retain at most five unexpired installation tokens", async () =>
   assert.equal(Number((await pool.query("select count(id)::int count from audit_events where action='create_installation_token'")).rows[0].count), 5);
   await pool.end();
 });
+
+test("deleting a key invalidates its unconsumed installation token", async () => {
+  const { pool, userId, apiKeyService, key, service } = await setup();
+  const issued = await service.create({ userId, sessionId: "session-1", apiKeyId: key.id });
+  await apiKeyService.delete({ userId, keyId: key.id });
+  await assert.rejects(service.exchange(issued.token), (error) => error.code === "api_key_invalid");
+  await pool.end();
+});

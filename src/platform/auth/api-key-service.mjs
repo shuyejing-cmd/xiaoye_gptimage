@@ -34,7 +34,7 @@ export function createApiKeyService({ pool, pepper, cipher, randomBytes = crypto
     create({ userId, name }) {
       return withTransaction(pool, async (client) => {
         await client.query("select id from users where id=$1 for update", [userId]);
-        const active = await client.query("select count(*)::int as count from api_keys where user_id=$1 and status='active'", [userId]);
+        const active = await client.query("select count(*)::int as count from api_keys where user_id=$1 and status='active' and deleted_at is null", [userId]);
         if (Number(active.rows[0].count) >= 3) throw new AppError({ code: "api_key_limit_reached", message: "最多只能保留三个有效密钥", httpStatus: 409 });
         const secret = randomBytes(24).toString("base64url");
         const prefix = secret.slice(0, 8);
@@ -48,8 +48,26 @@ export function createApiKeyService({ pool, pepper, cipher, randomBytes = crypto
     },
 
     async list(userId) {
-      const rows = await pool.query("select * from api_keys where user_id=$1 order by created_at desc,id desc", [userId]);
+      const rows = await pool.query("select * from api_keys where user_id=$1 and deleted_at is null order by created_at desc,id desc", [userId]);
       return rows.rows.map((row) => publicKey(row, cipher));
+    },
+
+    delete({ userId, keyId }) {
+      return withTransaction(pool, async (client) => {
+        const row = (await client.query("select * from api_keys where id=$1 and user_id=$2 for update", [keyId, userId])).rows[0];
+        if (!row) throw new AppError({ code: "api_key_not_found", message: "密钥不存在或已删除", httpStatus: 404 });
+        if (row.deleted_at) return { id: row.id, deleted: true };
+        const deletedAt = now();
+        await client.query(
+          "update api_keys set status='revoked',revoked_at=$3,deleted_at=$3,encrypted_key=null where id=$1 and user_id=$2",
+          [keyId, userId, deletedAt]
+        );
+        await client.query(
+          "insert into audit_events(actor_user_id,action,target_type,target_id,created_at) values($1,'delete_api_key','api_key',$2,$3)",
+          [userId, String(keyId), deletedAt]
+        );
+        return { id: row.id, deleted: true };
+      });
     },
 
     async revoke({ userId, keyId }) {
