@@ -159,7 +159,7 @@ Run: `node --test test/platform/platform-app.test.mjs`
 
 Expected: all platform HTTP tests pass.
 
-Run: `npm run build:web`
+Run: `npm run web:build`
 
 Expected: Vite build exits 0.
 
@@ -183,7 +183,7 @@ Expected: all tests pass with zero failures.
 
 - [ ] **Step 2: Run production builds**
 
-Run: `npm run build:web`
+Run: `npm run web:build`
 
 Expected: Vite build exits 0 with generated assets.
 
@@ -198,4 +198,3 @@ Through authenticated API behavior, create three keys, delete one, confirm the o
 - [ ] **Step 5: Record completion**
 
 Run `git status --short` and confirm there are no unintended changes. Update this plan's checkboxes, then commit the plan completion if its checkbox state changed.
-
