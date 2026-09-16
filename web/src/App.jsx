@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatInstallExpiry, formatWorkBuddyMcpConfig, installationPromptStatus } from "./mcp-config.js";
+import { requestHeaders } from "./http-options.js";
 
 async function api(path, options = {}) {
-  const response = await fetch(path, { credentials: "same-origin", ...options, headers: options.body instanceof FormData ? options.headers : { "content-type": "application/json", ...options.headers } });
+  const response = await fetch(path, { credentials: "same-origin", ...options, headers: requestHeaders(options) });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error?.message || "请求失败，请稍后重试");
   return body;
