@@ -390,7 +390,7 @@ git commit -m "feat: install WorkBuddy MCP from one-time token"
 - Modify: `installer/build-installer.ps1`
 - Create: `test/platform/installer-release.test.mjs`
 
-- [ ] **Step 1: Write failing manifest and bootstrap contract tests**
+- [x] **Step 1: Write failing manifest and bootstrap contract tests**
 
 Test a pure manifest builder:
 
@@ -405,7 +405,7 @@ assert.deepEqual(buildReleaseManifest({ version, sha256, publisher, installerUrl
 
 Read the bootstrap as text and assert it requires HTTPS URLs, downloads the manifest before the executable, compares SHA-256 using `Get-FileHash`, validates Authenticode status and exact publisher, passes `/TOKENFILE=`, and removes downloaded/token temporary files in `finally`. Assert it contains no `Invoke-Expression` and no execution-policy bypass.
 
-- [ ] **Step 2: Run the release test and confirm RED**
+- [x] **Step 2: Run the release test and confirm RED**
 
 ```powershell
 node --test --test-isolation=none test/platform/installer-release.test.mjs
@@ -413,7 +413,7 @@ node --test --test-isolation=none test/platform/installer-release.test.mjs
 
 Expected: FAIL because manifest builder and bootstrap are missing.
 
-- [ ] **Step 3: Implement the bootstrap**
+- [x] **Step 3: Implement the bootstrap**
 
 Accept only:
 
@@ -426,7 +426,7 @@ param(
 
 Resolve and validate the token file inside the current user's temp directory, require TLS 1.2+, reject redirects to non-HTTPS URLs, validate manifest fields, compare SHA-256 in constant textual form, require `Get-AuthenticodeSignature(...).Status -eq 'Valid'`, compare the signer subject against the fixed publisher, start the installer with `/VERYSILENT /TOKENFILE="..."`, wait for its exit code, and clean temporary files in `finally`.
 
-- [ ] **Step 4: Publish a versioned manifest only after signing**
+- [x] **Step 4: Publish a versioned manifest only after signing**
 
 Update `build-installer.ps1` so the signed branch performs this order:
 
@@ -438,7 +438,7 @@ build -> Authenticode sign -> signature verify -> SHA-256 -> manifest JSON
 
 The unsigned branch may build a local test executable but must not write anything under `web/public/install` or `web/public/downloads`.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run the Step 2 command. Expected: PASS.
 
