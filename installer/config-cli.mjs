@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readFile, unlink } from "node:fs/promises";
-import { discoverWorkBuddyConfig } from "./config-discovery.mjs";
+import { discoverWorkBuddyConfig, readRememberedConfigPath, rememberConfigPath } from "./config-discovery.mjs";
 import {
   deleteRecoveredApiKey,
   exchangeInstallationToken,
@@ -16,11 +16,15 @@ const EXIT_CODES = {
   workbuddy_config_not_found: 21,
   installation_token_file_insecure: 22,
   invalid_installation_token: 23,
-  installation_token_expired: 23,
-  installation_token_used: 23,
+  installation_token_expired: 27,
+  installation_token_used: 28,
+  api_key_invalid: 29,
+  invalid_session: 30,
+  account_suspended: 31,
   installation_exchange_unavailable: 24,
   installation_exchange_rejected: 24,
-  workbuddy_config_self_check_failed: 25
+  workbuddy_config_self_check_failed: 25,
+  workbuddy_config_invalid: 26
 };
 
 function parseOptions(values) {
@@ -40,8 +44,8 @@ async function readAndDelete(path) {
   finally { await unlink(path).catch(() => {}); }
 }
 
-async function resolveConfigPath(command, options) {
-  if (command !== "install-token") return options["--config"] || defaultConfigPath();
+async function resolveConfigPath(command, options, installDir) {
+  if (command !== "install-token") return options["--config"] || await readRememberedConfigPath(installDir) || defaultConfigPath();
   const result = await discoverWorkBuddyConfig({ explicitPath: options["--config"] });
   return result.configPath;
 }
@@ -59,15 +63,17 @@ async function run() {
     }
     let exchanged;
     try {
-      const configPath = await resolveConfigPath(command, options);
+      const configPath = await resolveConfigPath(command, options, installDir);
       exchanged = await exchangeInstallationToken({ gatewayUrl: options["--gateway"], tokenFile: options["--token-file"] });
+      await rememberConfigPath({ installDir, configPath, restrict: restrictPrivateFile });
       await installVerifiedWorkBuddyConfig({
         configPath,
         gatewayUrl: exchanged.gatewayUrl,
         apiKey: exchanged.apiKey,
         allowedRoots: (options["--roots"] || "").split(";").filter(Boolean),
         installDir,
-        restrict: restrictPrivateFile
+        restrict: restrictPrivateFile,
+        afterVerified: () => rememberConfigPath({ installDir, configPath, restrict: restrictPrivateFile })
       });
       await deleteRecoveredApiKey(installDir);
       console.log(JSON.stringify({ status: "installed", config_path: configPath }));
@@ -80,7 +86,7 @@ async function run() {
     return;
   }
 
-  const configPath = await resolveConfigPath(command, options);
+  const configPath = await resolveConfigPath(command, options, installDir);
 
   if (command === "install" || command === "repair") {
     const apiKey = await readAndDelete(options["--key-file"])
@@ -98,7 +104,8 @@ async function run() {
       allowedRoots: (options["--roots"] || "").split(";").filter(Boolean),
       installDir,
       repair: command === "repair",
-      restrict: restrictPrivateFile
+      restrict: restrictPrivateFile,
+      afterVerified: installDir ? () => rememberConfigPath({ installDir, configPath, restrict: restrictPrivateFile }) : undefined
     });
     if (installDir) await deleteRecoveredApiKey(installDir);
     console.log("WorkBuddy xiaoye-image 配置已安装");

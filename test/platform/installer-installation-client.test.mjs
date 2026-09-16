@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -8,7 +8,9 @@ import {
   exchangeInstallationToken,
   preserveRecoveredApiKey,
   readRecoveredApiKey,
-  recoveredKeyFile
+  recoveredKeyFile,
+  restrictPrivateFile,
+  verifyPrivateTokenFile
 } from "../../installer/installation-client.mjs";
 
 async function tokenFixture(value = "wb_install_public_secret") {
@@ -82,13 +84,18 @@ test("exchange rejects a token file that is not private to the current user", as
 test("a recovered API key is private, reusable for repair, and deletable", async () => {
   const installDir = await mkdtemp(join(tmpdir(), "wb-recovered-key-"));
   let restrictedPath;
+  let contentBeforeRestriction;
   const path = await preserveRecoveredApiKey({
     installDir,
     apiKey: "wb_live_recovered_secret",
-    restrict: async (value) => { restrictedPath = value; }
+    restrict: async (value) => {
+      restrictedPath = value;
+      contentBeforeRestriction = await readFile(value, "utf8");
+    }
   });
   assert.equal(path, recoveredKeyFile(installDir));
   assert.equal(restrictedPath, path);
+  assert.equal(contentBeforeRestriction, "");
   assert.equal(await readRecoveredApiKey(installDir), "wb_live_recovered_secret");
   await deleteRecoveredApiKey(installDir);
   assert.equal(await readRecoveredApiKey(installDir), null);
@@ -101,4 +108,19 @@ test("the Inno installer exposes token, config, and roots automation parameters"
   assert.match(source, /\{param:ROOTS\|\}/);
   assert.match(source, /install-token/);
   assert.match(source, /DeleteFile\(TokenFileParam\)/);
+  assert.match(source, /doctor --install-dir=/);
+  assert.match(source, /uninstall --install-dir=/);
+  assert.match(source, /RESULTFILE/);
+});
+
+test("Windows ACL verification accepts a file restricted to the current user", { skip: process.platform !== "win32" }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "wb-token-acl-"));
+  const tokenFile = join(directory, "token.txt");
+  try {
+    await writeFile(tokenFile, "redacted");
+    await restrictPrivateFile(tokenFile);
+    assert.equal(await verifyPrivateTokenFile(tokenFile), true);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

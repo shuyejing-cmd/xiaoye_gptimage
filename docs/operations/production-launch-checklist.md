@@ -39,7 +39,7 @@
 - [ ] 在 Windows 10 和 Windows 11 的全新本地用户中分别验证默认路径、自定义安装目录和显式选择的 `mcp.json`。
 - [ ] 在已有多个 MCP 的配置中安装、修复和卸载，其他 MCP 始终保留。
 - [ ] 在损坏配置场景验证备份和恢复路径，记录无法恢复的原始损坏内容。
-- [ ] 1.1.0 安装器的 Authenticode 状态为 `Valid`，签名主题与 bootstrap 固定发布者完全一致，之后安装包、SHA-256 清单和 bootstrap 才复制到网站目录。
+- [ ] 1.1.0 安装器和 bootstrap 的 Authenticode 状态均为 `Valid`，签名主题与 bootstrap 固定发布者完全一致，之后安装包、SHA-256 清单和 bootstrap 才复制到网站目录。
 - [ ] 抽查安装提示词、WorkBuddy 命令参数、安装器输出和服务日志，均不含 `wb_live_` 长期 Key。
 
 ## 安全与观察期

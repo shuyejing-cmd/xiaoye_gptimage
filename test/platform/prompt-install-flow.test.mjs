@@ -100,6 +100,7 @@ test("prompt-guided install keeps the long-lived Key out of prompts, arguments, 
       apiKey: exchanged.apiKey,
       allowedRoots: [join(userProfile, "Pictures")],
       installDir,
+      mcpProbe: async () => true,
       fetchImpl: async (_url, options) => responseFromInjection(await app.inject({
         method: "GET",
         url: "/v1/account/balance",

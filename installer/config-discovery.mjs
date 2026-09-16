@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export class WorkBuddyConfigDiscoveryError extends Error {
@@ -15,6 +15,35 @@ export function defaultDiscoveryCandidates(env = process.env) {
     env.LOCALAPPDATA && join(env.LOCALAPPDATA, "WorkBuddy", "mcp.json"),
     env.USERPROFILE && join(env.USERPROFILE, "workbuddy", "mcp.json")
   ].filter(Boolean);
+}
+
+function rememberedPathFile(installDir) {
+  return join(installDir, "installer", "workbuddy-config-path.txt");
+}
+
+export async function rememberConfigPath({ installDir, configPath, restrict = async () => {} }) {
+  const path = rememberedPathFile(installDir);
+  await mkdir(join(installDir, "installer"), { recursive: true });
+  await writeFile(path, "", { mode: 0o600 });
+  try {
+    await restrict(path);
+    await writeFile(path, String(configPath), { mode: 0o600 });
+  } catch (error) {
+    await unlink(path).catch(() => {});
+    throw error;
+  }
+  return path;
+}
+
+export async function readRememberedConfigPath(installDir) {
+  if (!installDir) return null;
+  try {
+    const value = (await readFile(rememberedPathFile(installDir), "utf8")).trim();
+    return value || null;
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 async function defaultExists(path) {

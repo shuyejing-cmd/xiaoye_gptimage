@@ -9,6 +9,8 @@ const SAFE_CODES = new Set([
   "installation_token_expired",
   "installation_token_used",
   "api_key_invalid",
+  "invalid_session",
+  "account_suspended",
   "installations_unavailable",
   "rate_limited"
 ]);
@@ -25,13 +27,20 @@ export async function verifyPrivateTokenFile(tokenFile) {
   if (process.platform !== "win32") return true;
   try {
     const script = [
-      "$acl=Get-Acl -LiteralPath $args[0]",
+      "$path=$env:WORKBUDDY_INSTALLATION_TOKEN_FILE",
+      "if([string]::IsNullOrWhiteSpace($path)){exit 2}",
+      "$acl=[System.IO.File]::GetAccessControl($path)",
       "$me=[System.Security.Principal.WindowsIdentity]::GetCurrent().User",
-      "if($acl.Owner -ne $me.Value -and $acl.Owner -ne [System.Security.Principal.WindowsIdentity]::GetCurrent().Name){exit 3}",
-      "$unsafe=$acl.Access | Where-Object {$_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -notin @($me.Value,[System.Security.Principal.WindowsIdentity]::GetCurrent().Name,'NT AUTHORITY\\SYSTEM','BUILTIN\\Administrators')}",
+      "$owner=$acl.GetOwner([System.Security.Principal.SecurityIdentifier])",
+      "if($owner.Value -ne $me.Value){exit 3}",
+      "$rules=$acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])",
+      "$unsafe=$rules | Where-Object {$_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -notin @($me.Value,'S-1-5-18','S-1-5-32-544')}",
       "if($unsafe){exit 4}"
     ].join("; ");
-    await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script, tokenFile], { windowsHide: true });
+    await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+      windowsHide: true,
+      env: { ...process.env, WORKBUDDY_INSTALLATION_TOKEN_FILE: tokenFile }
+    });
     return true;
   } catch {
     return false;
@@ -56,9 +65,10 @@ export function recoveredKeyFile(installDir) {
 export async function preserveRecoveredApiKey({ installDir, apiKey, restrict = restrictPrivateFile }) {
   const path = recoveredKeyFile(installDir);
   await mkdir(join(installDir, "installer"), { recursive: true });
-  await writeFile(path, apiKey, { mode: 0o600 });
+  await writeFile(path, "", { mode: 0o600 });
   try {
     await restrict(path);
+    await writeFile(path, apiKey, { mode: 0o600 });
   } catch (error) {
     await unlink(path).catch(() => {});
     throw error;

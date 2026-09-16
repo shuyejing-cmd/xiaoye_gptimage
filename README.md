@@ -114,7 +114,7 @@ WorkBuddy 不能执行本机命令时，使用网站的“下载安装器”手�
 - `https://xiaoyeai.cn/install/workbuddy-image-mcp-1.1.0.json`
 - `https://xiaoyeai.cn/install/WorkBuddy-Image-MCP-Setup-1.1.0.exe`
 
-构建机需安装 Inno Setup 6。未配置证书时只生成本地测试包，不会写入网站目录；设置证书 SHA-1 后，脚本按“构建 → Authenticode 签名 → 验证签名和精确发布者 → SHA-256 → 清单 → 发布”的顺序执行。bootstrap 当前固定要求发布者主题为 `CN=Xiaoye AI`；正式购买证书后的主题必须与其完全一致，否则应在发布前审查并同时更新 bootstrap 与构建脚本中的固定值。
+构建机需安装 Inno Setup 6。未配置证书时只生成本地测试包，不会写入网站目录；设置证书 SHA-1 后，脚本按“构建 → 安装器和 bootstrap 的 Authenticode 签名 → 验证签名和精确发布者 → SHA-256 → 清单 → 发布”的顺序执行。bootstrap 当前固定要求发布者主题为 `CN=Xiaoye AI`；正式购买证书后的主题必须与其完全一致，否则应在发布前审查并同时更新 bootstrap 与构建脚本中的固定值。
 
 ```powershell
 $env:CODE_SIGN_CERT_SHA1 = "certificate-thumbprint"
