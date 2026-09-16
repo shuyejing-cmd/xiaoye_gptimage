@@ -23,3 +23,10 @@ test("builds a complete paste-ready WorkBuddy MCP configuration", () => {
   });
   assert.equal(JSON.parse(mcpConfig.formatWorkBuddyMcpConfig("wb_live_public_secret")).mcpServers["xiaoye-image"].env.IMAGE_API_KEY, "wb_live_public_secret");
 });
+
+test("formats prompt installation feedback and expiry", () => {
+  assert.equal(mcpConfig.installationPromptStatus({ copied: true }), "安装提示词已复制，请粘贴给 WorkBuddy");
+  assert.equal(mcpConfig.installationPromptStatus({ copied: false }), "复制失败，请手动复制下方安装提示词");
+  const localExpiry = new Date(2026, 8, 15, 12, 10, 0);
+  assert.match(mcpConfig.formatInstallExpiry(localExpiry, "zh-CN"), /12:10/);
+});

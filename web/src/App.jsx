@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatWorkBuddyMcpConfig } from "./mcp-config.js";
+import { formatInstallExpiry, formatWorkBuddyMcpConfig, installationPromptStatus } from "./mcp-config.js";
 
 async function api(path, options = {}) {
   const response = await fetch(path, { credentials: "same-origin", ...options, headers: options.body instanceof FormData ? options.headers : { "content-type": "application/json", ...options.headers } });
@@ -82,19 +82,29 @@ function Overview({ me }) {
 }
 
 function Keys() {
-  const [keys, setKeys] = useState([]), [error, setError] = useState(""), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [copyState, setCopyState] = useState({});
+  const [keys, setKeys] = useState([]), [error, setError] = useState(""), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [issuing, setIssuing] = useState(""), [copyState, setCopyState] = useState({}), [promptFallback, setPromptFallback] = useState(null);
   const load = useCallback(() => api("/api/api-keys").then(x => setKeys(x.keys)).finally(()=>setLoading(false)), []);
   useEffect(() => { load().catch(e => setError(e.message)); }, [load]);
   const create = async () => { setBusy(true); setError(""); try { await api("/api/api-keys", { method:"POST", body: JSON.stringify({ name:"WorkBuddy Windows" }) }); await load(); } catch(e) { setError(e.message); } finally { setBusy(false); } };
   const revoke = async id => { if (!confirm("撤销后使用此 Key 的 WorkBuddy 会立即失去访问权限。继续吗？")) return; setBusy(true); try { await api(`/api/api-keys/${id}`, { method:"DELETE" }); await load(); } catch(e){setError(e.message)} finally {setBusy(false)} };
   const copy = async (id, type, value) => { try { await navigator.clipboard.writeText(value); setCopyState({ id, type, message: type === "config" ? "完整配置已复制" : "Key 已复制" }); } catch { setCopyState({ id, type, message: "复制失败，请手动选择内容" }); } };
+  const issuePrompt = async (key) => {
+    setIssuing(key.id); setError(""); setPromptFallback(null);
+    try {
+      const result = await api(`/api/api-keys/${key.id}/installation-token`, { method: "POST" });
+      let copied = true;
+      try { await navigator.clipboard.writeText(result.prompt); } catch { copied = false; setPromptFallback({ id: key.id, prompt: result.prompt }); }
+      setCopyState({ id: key.id, type: "prompt", message: `${installationPromptStatus({ copied })}，有效至 ${formatInstallExpiry(result.expires_at)}` });
+    } catch (e) { setError(e.message); }
+    finally { setIssuing(""); }
+  };
   return <section className="page"><header className="page-head"><h1>个人 MCP Key</h1><p>每位用户最多保留 3 个有效 Key。登录后可随时复制完整 Key 和 WorkBuddy 配置。</p></header>
     <div className="toolbar"><button className="primary" onClick={create} disabled={busy}>{busy ? "正在处理…" : "创建新 Key"}</button><span>{keys.filter(x=>x.status==="active").length} / 3 个有效</span></div>
     {error && <p className="error" role="alert">{error}</p>}
     <div className="key-list">{loading ? <Loading/> : keys.length ? keys.map(key => {
       const config = key.key ? formatWorkBuddyMcpConfig(key.key) : "";
       return <article className="key-entry" key={key.id}><div className="key-entry-head"><div><h2>{key.name}</h2><code className="full-key">{key.key || `wb_live_${key.prefix}_••••••••`}</code></div><div className="key-meta"><Status value={key.status}/><small>{key.lastUsedAt ? `最近使用 ${new Date(key.lastUsedAt).toLocaleString("zh-CN")}` : "尚未使用"}</small>{key.status === "active" && <button disabled={busy} className="danger-text" onClick={() => revoke(key.id)}>撤销</button>}</div></div>
-        {key.key ? <div className="key-delivery"><div className="key-actions"><button onClick={() => copy(key.id, "key", key.key)}>复制 Key</button><button className="primary" onClick={() => copy(key.id, "config", config)}>复制完整配置</button><span aria-live="polite">{copyState.id === key.id ? copyState.message : ""}</span></div><div className="config-heading"><h3>WorkBuddy MCP 完整配置</h3><p>默认读取当前 Windows 用户的 Pictures 目录；安装器使用自定义目录时请用“修复配置”。</p></div><pre tabIndex="0"><code>{config}</code></pre></div> : key.status === "active" ? <p className="key-unrecoverable">这是升级前创建的旧 Key，无法恢复完整内容。请撤销后重新创建。</p> : null}
+        {key.key ? <div className="key-delivery"><div className="key-actions"><button className="primary" disabled={issuing === key.id} onClick={() => issuePrompt(key)}>{issuing === key.id ? "正在生成…" : "复制安装提示词"}</button><a href="/downloads/WorkBuddy-Image-MCP-Setup.exe">下载安装器</a><button onClick={() => copy(key.id, "config", config)}>复制完整配置</button><button onClick={() => copy(key.id, "key", key.key)}>复制 Key</button><span aria-live="polite">{copyState.id === key.id ? copyState.message : ""}</span></div>{promptFallback?.id === key.id && <div className="prompt-fallback"><b>手动复制这段提示词</b><pre tabIndex="0">{promptFallback.prompt}</pre></div>}<div className="config-heading"><h3>WorkBuddy MCP 完整配置</h3><p>这是手动备用方案。正常安装只需复制上方提示词并粘贴给 WorkBuddy。</p></div><pre tabIndex="0"><code>{config}</code></pre></div> : key.status === "active" ? <p className="key-unrecoverable">这是升级前创建的旧 Key，无法恢复完整内容。请撤销后重新创建。</p> : null}
       </article>;
     }) : <Empty>还没有 Key。创建后即可复制完整 WorkBuddy 配置。</Empty>}</div>
   </section>;
@@ -115,8 +125,8 @@ function Recharge() {
 }
 
 function Install() {
-  return <section className="page"><header className="page-head"><h1>把图片 MCP 装进 WorkBuddy</h1><p>安装包内含运行环境，不需要另外安装 Node.js。安装前先创建个人 Key。</p></header>
-    <div className="install-flow"><ol><li><b>下载安装包</b><p>运行经过签名的 Windows 安装程序。</p></li><li><b>粘贴个人 Key</b><p>安装器会连接服务器验证 Key 和余额。</p></li><li><b>选择图片目录</b><p>只授权 WorkBuddy 可以读取的本地参考图目录。</p></li><li><b>检测连接</b><p>安装器仅合并 xiaoye-image，不覆盖其他 MCP 配置。</p></li></ol><div className="download-plate"><Icon name="install"/><h2>WorkBuddy 图片 MCP</h2><p>Windows 10 / 11 · x64</p><a className="primary" href="/downloads/WorkBuddy-Image-MCP-Setup.exe">下载安装包</a><small>Key 会保存在当前 Windows 用户可读的 WorkBuddy 配置中。</small></div></div>
+  return <section className="page"><header className="page-head"><h1>把图片 MCP 装进 WorkBuddy</h1><p>正常流程不需要判断 Node.js、安装目录或配置路径，只需复制一段提示词。</p></header>
+    <div className="install-flow"><ol><li><b>创建个人 Key</b><p>前往“MCP Key”页面，选择一个有效 Key。</p></li><li><b>复制提示词给 WorkBuddy</b><p>点击“复制安装提示词”，粘贴到 WorkBuddy 对话中。</p></li><li><b>允许执行并开启 MCP</b><p>确认一次本机执行权限；安装完成后开启 xiaoye-image，必要时重启 WorkBuddy。</p></li></ol><div className="download-plate"><Icon name="install"/><h2>手动备用安装</h2><p>WorkBuddy 不能执行本机命令时使用。</p><a className="primary" href="/downloads/WorkBuddy-Image-MCP-Setup.exe">下载安装器</a><small>完整 JSON 配置和个人 Key 可在“MCP Key”页面复制。</small></div></div>
   </section>;
 }
 

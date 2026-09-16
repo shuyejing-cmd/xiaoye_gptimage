@@ -22,10 +22,13 @@
 .key-entry-head .full-key { padding: 12px 14px; background: #f8f7f4; border: 1px solid var(--line); overflow-wrap: anywhere; user-select: all; }
 .key-entry .key-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex: 0 0 auto; }
 .key-delivery { display: block; align-items: stretch; margin-top: 24px; background: #e0e1f2; padding: 24px 26px 26px; }
-.key-actions { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
-.key-actions button { min-height: 42px; padding: 10px 15px; border: 1px solid var(--ink); border-radius: 0; background: transparent; cursor: pointer; }
+.key-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 24px; }
+.key-actions button, .key-actions a { min-height: 42px; padding: 10px 15px; border: 1px solid var(--ink); border-radius: 0; background: transparent; color: inherit; cursor: pointer; text-decoration: none; }
 .key-actions .primary { background: var(--ink); color: var(--paper); }
 .key-actions span { margin-left: auto; min-height: 1.4em; color: var(--success); font-family: "JetBrains Mono Variable", monospace; font-size: 10px; }
+.prompt-fallback { margin: 0 0 24px; padding: 18px; border: 1px solid var(--line); background: var(--paper); }
+.prompt-fallback b { display: block; margin-bottom: 10px; font-size: 14px; }
+.prompt-fallback pre { max-height: 240px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .config-heading { display: grid; grid-template-columns: minmax(220px, .75fr) 1.25fr; gap: 28px; align-items: end; margin-bottom: 14px; }
 .config-heading h3 { margin: 0; font-size: 14px; }
 .config-heading p { margin: 0; color: var(--muted); line-height: 1.6; }

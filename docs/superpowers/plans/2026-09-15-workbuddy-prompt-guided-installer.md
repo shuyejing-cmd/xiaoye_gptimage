@@ -228,7 +228,7 @@ git commit -m "feat: expose prompt-guided installation API"
 - Modify: `web/src/mcp-config.js`
 - Modify: `test/web/mcp-config.test.mjs`
 
-- [ ] **Step 1: Add failing pure UI-state tests**
+- [x] **Step 1: Add failing pure UI-state tests**
 
 Extend `mcp-config.js` with small pure helpers and test:
 
@@ -239,7 +239,7 @@ assert.equal(formatInstallExpiry(new Date("2026-09-15T12:10:00Z"), "zh-CN").incl
 
 Do not duplicate the prompt formatter in the frontend; the API response is the sole prompt text.
 
-- [ ] **Step 2: Run the web unit test and confirm RED**
+- [x] **Step 2: Run the web unit test and confirm RED**
 
 ```powershell
 node --test --test-isolation=none test/web/mcp-config.test.mjs
@@ -247,7 +247,7 @@ node --test --test-isolation=none test/web/mcp-config.test.mjs
 
 Expected: FAIL because the helpers are missing.
 
-- [ ] **Step 3: Implement the Key-page primary action**
+- [x] **Step 3: Implement the Key-page primary action**
 
 For every recoverable active Key, render actions in this order:
 
@@ -260,7 +260,7 @@ For every recoverable active Key, render actions in this order:
 
 On click, POST `/api/api-keys/${key.id}/installation-token`, copy `response.prompt`, and show an `aria-live` confirmation with the exact expiration time. Disable only that Key's issue button while the request is pending. On clipboard failure, show the prompt in a selectable `<pre>` rather than creating a second token.
 
-- [ ] **Step 4: Simplify the Install page**
+- [x] **Step 4: Simplify the Install page**
 
 Replace the four-step default flow with:
 
@@ -272,11 +272,11 @@ Replace the four-step default flow with:
 
 Keep the signed installer and complete JSON under a clearly labeled manual fallback section. Do not remove direct Key display or revocation.
 
-- [ ] **Step 5: Add responsive and accessible states**
+- [x] **Step 5: Add responsive and accessible states**
 
 Reuse the existing flat ledger design. Ensure the prompt feedback is visible at 390px, buttons remain at least 42px high, keyboard focus is visible, expiration does not rely on color, and no Key or installation token is written to `localStorage`, URL state, analytics, or console.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run:
 
