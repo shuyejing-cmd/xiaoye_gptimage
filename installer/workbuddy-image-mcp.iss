@@ -23,6 +23,8 @@ Source: "{#StageDir}\runtime\node.exe"; DestDir: "{app}\runtime"; Flags: ignorev
 Source: "{#StageDir}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "config-manager.mjs"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "config-cli.mjs"; DestDir: "{app}\installer"; Flags: ignoreversion
+Source: "config-discovery.mjs"; DestDir: "{app}\installer"; Flags: ignoreversion
+Source: "installation-client.mjs"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "repair-config.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 
 [Icons]
@@ -36,14 +38,28 @@ Filename: "{app}\runtime\node.exe"; Parameters: """{app}\installer\config-cli.mj
 var
   KeyPage: TInputQueryWizardPage;
   ImageDirPage: TInputDirWizardPage;
+  TokenFileParam: String;
+  ConfigPathParam: String;
+  RootsParam: String;
 
 procedure InitializeWizard;
 begin
+  TokenFileParam := ExpandConstant('{param:TOKENFILE|}');
+  ConfigPathParam := ExpandConstant('{param:CONFIG|}');
+  RootsParam := ExpandConstant('{param:ROOTS|}');
   KeyPage := CreateInputQueryPage(wpSelectDir, '连接你的账户', '粘贴个人 MCP Key', 'Key 只用于当前 Windows 用户的 WorkBuddy 配置，请勿截图或转发。');
   KeyPage.Add('个人 Key：', True);
   ImageDirPage := CreateInputDirPage(KeyPage.ID, '选择参考图目录', 'WorkBuddy 可以读取哪些图片？', '请选择你允许图片 MCP 读取的目录。安装后可重新运行安装器修改。', False, '新建目录');
   ImageDirPage.Add('允许读取的目录：');
-  ImageDirPage.Values[0] := ExpandConstant('{userpictures}');
+  if RootsParam <> '' then
+    ImageDirPage.Values[0] := RootsParam
+  else
+    ImageDirPage.Values[0] := ExpandConstant('{userpictures}');
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (TokenFileParam <> '') and (PageID = KeyPage.ID);
 end;
 
 function ValidateKey(const Key: String): Boolean;
@@ -66,7 +82,7 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
-  if CurPageID = KeyPage.ID then
+  if (TokenFileParam = '') and (CurPageID = KeyPage.ID) then
   begin
     if Trim(KeyPage.Values[0]) = '' then
     begin
@@ -74,28 +90,60 @@ begin
       Result := False;
     end;
   end;
-  if (CurPageID = ImageDirPage.ID) and (not ValidateKey(Trim(KeyPage.Values[0]))) then
+  if (TokenFileParam = '') and (CurPageID = ImageDirPage.ID) and (not ValidateKey(Trim(KeyPage.Values[0]))) then
   begin
     MsgBox('Key 验证失败。请检查网络，或从网站重新复制个人 Key。', mbError, MB_OK);
     Result := False;
   end;
 end;
 
+function CliErrorMessage(ResultCode: Integer): String;
+begin
+  case ResultCode of
+    20: Result := '检测到多个 WorkBuddy 配置文件。请让 WorkBuddy 重新运行安装命令并指定 /CONFIG。';
+    21: Result := '未找到 WorkBuddy 配置文件。请先启动一次 WorkBuddy，或让 WorkBuddy 指定 /CONFIG。';
+    22: Result := '安装码文件权限不安全，已拒绝读取。请从网站重新生成安装提示词。';
+    23: Result := '安装码无效、已过期或已使用。请从网站重新生成安装提示词。';
+    24: Result := '暂时无法连接安装服务，请检查网络后重试。';
+    25: Result := '配置自检失败，原 WorkBuddy 配置已经恢复。可使用“修复配置”继续。';
+  else
+    Result := 'WorkBuddy 配置写入失败，原配置已保留或恢复。';
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
-  KeyFile, Params: String;
+  KeyFile, Params, RootsValue: String;
 begin
   if CurStep = ssPostInstall then
   begin
-    KeyFile := ExpandConstant('{tmp}\workbuddy-image-key.txt');
-    SaveStringToFile(KeyFile, Trim(KeyPage.Values[0]), False);
-    Params := '"' + ExpandConstant('{app}\installer\config-cli.mjs') + '" install' +
-      ' --gateway=https://xiaoyeai.cn' +
-      ' --key-file="' + KeyFile + '"' +
-      ' --roots="' + ImageDirPage.Values[0] + '"' +
-      ' --install-dir="' + ExpandConstant('{app}') + '"';
-    if not Exec(ExpandConstant('{app}\runtime\node.exe'), Params, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
-      RaiseException('WorkBuddy 配置写入失败，原配置已保留或恢复。');
+    RootsValue := ImageDirPage.Values[0];
+    if RootsParam <> '' then RootsValue := RootsParam;
+    KeyFile := '';
+    try
+      if TokenFileParam <> '' then
+        Params := '"' + ExpandConstant('{app}\installer\config-cli.mjs') + '" install-token' +
+          ' --gateway=https://xiaoyeai.cn' +
+          ' --token-file="' + TokenFileParam + '"'
+      else
+      begin
+        KeyFile := ExpandConstant('{tmp}\workbuddy-image-key.txt');
+        SaveStringToFile(KeyFile, Trim(KeyPage.Values[0]), False);
+        Params := '"' + ExpandConstant('{app}\installer\config-cli.mjs') + '" install' +
+          ' --gateway=https://xiaoyeai.cn' +
+          ' --key-file="' + KeyFile + '"';
+      end;
+      Params := Params +
+        ' --roots="' + RootsValue + '"' +
+        ' --install-dir="' + ExpandConstant('{app}') + '"';
+      if ConfigPathParam <> '' then Params := Params + ' --config="' + ConfigPathParam + '"';
+      if not Exec(ExpandConstant('{app}\runtime\node.exe'), Params, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+        ResultCode := 1;
+      if ResultCode <> 0 then RaiseException(CliErrorMessage(ResultCode));
+    finally
+      if TokenFileParam <> '' then DeleteFile(TokenFileParam);
+      if KeyFile <> '' then DeleteFile(KeyFile);
+    end;
   end;
 end;

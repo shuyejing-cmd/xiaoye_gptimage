@@ -1,39 +1,139 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { execFileSync } from "node:child_process";
 import { readFile, unlink } from "node:fs/promises";
-import { installWorkBuddyConfig, removeWorkBuddyConfig, diagnoseWorkBuddyConfig } from "./config-manager.mjs";
+import { discoverWorkBuddyConfig } from "./config-discovery.mjs";
+import {
+  deleteRecoveredApiKey,
+  exchangeInstallationToken,
+  preserveRecoveredApiKey,
+  readRecoveredApiKey,
+  restrictPrivateFile
+} from "./installation-client.mjs";
+import { installVerifiedWorkBuddyConfig, removeWorkBuddyConfig, diagnoseWorkBuddyConfig } from "./config-manager.mjs";
 
-const [command, ...values] = process.argv.slice(2);
-const options = Object.fromEntries(values.map((value) => value.split("=", 2)));
-const configPath = options["--config"] || join(homedir(), ".workbuddy", "mcp.json");
-let apiKey = options["--key-file"] ? (await readFile(options["--key-file"], "utf8")).trim() : options["--key"];
-if (options["--key-file"]) await unlink(options["--key-file"]).catch(() => {});
+const EXIT_CODES = {
+  workbuddy_config_ambiguous: 20,
+  workbuddy_config_not_found: 21,
+  installation_token_file_insecure: 22,
+  invalid_installation_token: 23,
+  installation_token_expired: 23,
+  installation_token_used: 23,
+  installation_exchange_unavailable: 24,
+  installation_exchange_rejected: 24,
+  workbuddy_config_self_check_failed: 25
+};
 
-async function restrictToCurrentUser(path) {
-  if (process.platform !== "win32") return;
-  execFileSync("icacls.exe", [path, "/inheritance:r", "/grant:r", `${process.env.USERNAME}:(R,W)`], { stdio: "ignore" });
+function parseOptions(values) {
+  return Object.fromEntries(values.map((value) => {
+    const separator = value.indexOf("=");
+    return separator === -1 ? [value, ""] : [value.slice(0, separator), value.slice(separator + 1)];
+  }));
 }
 
-if (command === "install" || command === "repair") {
-  const gatewayUrl = options["--gateway"];
-  const result = await diagnoseWorkBuddyConfig({ configPath, gatewayUrl, apiKey });
-  if (!result.checks.key) throw new Error("个人 Key 验证失败，请重新复制后再试");
-  await installWorkBuddyConfig({ configPath, gatewayUrl, apiKey, allowedRoots: (options["--roots"] || "").split(";").filter(Boolean), installDir: options["--install-dir"], repair: command === "repair" });
-  await restrictToCurrentUser(configPath);
-  console.log("WorkBuddy xiaoye-image 配置已安装");
-} else if (command === "uninstall") {
-  await removeWorkBuddyConfig({ configPath });
-  await restrictToCurrentUser(configPath);
-  console.log("已移除 xiaoye-image；其他 MCP 配置保持不变");
-} else if (command === "doctor") {
-  let gatewayUrl = options["--gateway"];
-  if (!apiKey || !gatewayUrl) {
-    const current = JSON.parse(await readFile(configPath, "utf8"));
-    apiKey ||= current.mcpServers?.["xiaoye-image"]?.env?.IMAGE_API_KEY;
-    gatewayUrl ||= current.mcpServers?.["xiaoye-image"]?.env?.IMAGE_GATEWAY_URL;
+function defaultConfigPath() {
+  return join(homedir(), ".workbuddy", "mcp.json");
+}
+
+async function readAndDelete(path) {
+  if (!path) return null;
+  try { return (await readFile(path, "utf8")).trim(); }
+  finally { await unlink(path).catch(() => {}); }
+}
+
+async function resolveConfigPath(command, options) {
+  if (command !== "install-token") return options["--config"] || defaultConfigPath();
+  const result = await discoverWorkBuddyConfig({ explicitPath: options["--config"] });
+  return result.configPath;
+}
+
+async function run() {
+  const [command, ...values] = process.argv.slice(2);
+  const options = parseOptions(values);
+  const installDir = options["--install-dir"];
+
+  if (command === "install-token") {
+    if (!options["--gateway"] || !options["--token-file"] || !installDir) {
+      const error = new Error("installation_arguments_invalid");
+      error.code = "installation_arguments_invalid";
+      throw error;
+    }
+    let exchanged;
+    try {
+      const configPath = await resolveConfigPath(command, options);
+      exchanged = await exchangeInstallationToken({ gatewayUrl: options["--gateway"], tokenFile: options["--token-file"] });
+      await installVerifiedWorkBuddyConfig({
+        configPath,
+        gatewayUrl: exchanged.gatewayUrl,
+        apiKey: exchanged.apiKey,
+        allowedRoots: (options["--roots"] || "").split(";").filter(Boolean),
+        installDir,
+        restrict: restrictPrivateFile
+      });
+      await deleteRecoveredApiKey(installDir);
+      console.log(JSON.stringify({ status: "installed", config_path: configPath }));
+    } catch (error) {
+      if (exchanged?.apiKey) await preserveRecoveredApiKey({ installDir, apiKey: exchanged.apiKey });
+      throw error;
+    } finally {
+      await unlink(options["--token-file"]).catch(() => {});
+    }
+    return;
   }
-  const result = await diagnoseWorkBuddyConfig({ configPath, gatewayUrl, apiKey });
-  console.log(JSON.stringify(result));
-  process.exitCode = result.ok ? 0 : 1;
-} else throw new Error("命令必须是 install、repair、doctor 或 uninstall");
+
+  const configPath = await resolveConfigPath(command, options);
+
+  if (command === "install" || command === "repair") {
+    const apiKey = await readAndDelete(options["--key-file"])
+      || options["--key"]
+      || (command === "repair" && installDir ? await readRecoveredApiKey(installDir) : null);
+    if (!apiKey) {
+      const error = new Error("api_key_required");
+      error.code = "api_key_required";
+      throw error;
+    }
+    await installVerifiedWorkBuddyConfig({
+      configPath,
+      gatewayUrl: options["--gateway"],
+      apiKey,
+      allowedRoots: (options["--roots"] || "").split(";").filter(Boolean),
+      installDir,
+      repair: command === "repair",
+      restrict: restrictPrivateFile
+    });
+    if (installDir) await deleteRecoveredApiKey(installDir);
+    console.log("WorkBuddy xiaoye-image 配置已安装");
+    return;
+  }
+
+  if (command === "uninstall") {
+    await removeWorkBuddyConfig({ configPath });
+    await restrictPrivateFile(configPath);
+    console.log("已移除 xiaoye-image；其他 MCP 配置保持不变");
+    return;
+  }
+
+  if (command === "doctor") {
+    let gatewayUrl = options["--gateway"];
+    let apiKey = options["--key"] || await readAndDelete(options["--key-file"]);
+    if (!apiKey || !gatewayUrl) {
+      const current = JSON.parse(await readFile(configPath, "utf8"));
+      apiKey ||= current.mcpServers?.["xiaoye-image"]?.env?.IMAGE_API_KEY;
+      gatewayUrl ||= current.mcpServers?.["xiaoye-image"]?.env?.IMAGE_GATEWAY_URL;
+    }
+    const result = await diagnoseWorkBuddyConfig({ configPath, gatewayUrl, apiKey });
+    console.log(JSON.stringify(result));
+    process.exitCode = result.ok ? 0 : 1;
+    return;
+  }
+
+  const error = new Error("command_invalid");
+  error.code = "command_invalid";
+  throw error;
+}
+
+run().catch((error) => {
+  const code = error?.code || "installation_failed";
+  const promptForConfigPath = code === "workbuddy_config_ambiguous" || code === "workbuddy_config_not_found";
+  console.error(JSON.stringify({ status: promptForConfigPath ? "prompt_for_config_path" : "failed", code }));
+  process.exitCode = EXIT_CODES[code] || 1;
+});

@@ -305,7 +305,7 @@ git commit -m "feat: make prompt installation the primary website flow"
 - Modify: `test/platform/installer-config.test.mjs`
 - Create: `test/platform/installer-installation-client.test.mjs`
 
-- [ ] **Step 1: Write failing configuration-discovery tests**
+- [x] **Step 1: Write failing configuration-discovery tests**
 
 Use temporary Windows-style directory fixtures and injected `exists`/environment dependencies. Assert priority:
 
@@ -319,7 +319,7 @@ no candidate -> workbuddy_config_not_found
 
 Never select a path merely because it is beside an unrelated running process. A discovered candidate must either contain a valid `mcpServers` object or be the documented default path.
 
-- [ ] **Step 2: Write failing exchange-client tests**
+- [x] **Step 2: Write failing exchange-client tests**
 
 `exchangeInstallationToken({ gatewayUrl, tokenFile, fetchImpl })` must:
 
@@ -330,7 +330,7 @@ Never select a path merely because it is beside an unrelated running process. A 
 - map safe server codes without including the token or response body in errors;
 - reject a token file not owned by the current user when Windows ACL inspection fails.
 
-- [ ] **Step 3: Run installer tests and confirm RED**
+- [x] **Step 3: Run installer tests and confirm RED**
 
 ```powershell
 node --test --test-isolation=none test/platform/installer-config.test.mjs test/platform/installer-installation-client.test.mjs
@@ -338,7 +338,7 @@ node --test --test-isolation=none test/platform/installer-config.test.mjs test/p
 
 Expected: FAIL with missing discovery and exchange modules.
 
-- [ ] **Step 4: Implement discovery and exchange**
+- [x] **Step 4: Implement discovery and exchange**
 
 Keep discovery pure except for injected filesystem probes. Add a `promptForConfigPath` result to the CLI rather than silently choosing among multiple candidates. Make `config-cli.mjs install-token` accept only:
 
@@ -352,7 +352,7 @@ Keep discovery pure except for injected filesystem probes. Add a `promptForConfi
 
 Do not retain `--key` on the automated flow. The existing `install` and `repair` modes may keep `--key-file` for manual fallback.
 
-- [ ] **Step 5: Strengthen post-write self-diagnosis**
+- [x] **Step 5: Strengthen post-write self-diagnosis**
 
 After merging the config, verify all of the following before returning `installed`:
 
@@ -367,13 +367,13 @@ checks.gateway === true
 
 If a post-write check fails, restore the timestamped backup. Preserve the recovered Key in a user-only file under the install directory so `repair` can finish without another token; delete it after a successful repair.
 
-- [ ] **Step 6: Modify Inno Setup for token and manual modes**
+- [x] **Step 6: Modify Inno Setup for token and manual modes**
 
 Add silent parameters `/TOKENFILE=`, `/CONFIG=`, and `/ROOTS=`. When `/TOKENFILE` is present, skip the Key wizard page, default roots to `{userpictures}`, and invoke `config-cli.mjs install-token`. Without it, preserve the existing manual Key page.
 
 Ensure Inno never expands or logs file contents and deletes the token file even when installation fails. Map CLI exit codes to the stable Chinese error messages in the design.
 
-- [ ] **Step 7: Run installer tests and commit**
+- [x] **Step 7: Run installer tests and commit**
 
 Run the Step 3 command and `test/project-layout.test.mjs`. Expected: PASS.
 

@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 async function readConfig(configPath, repair = false) {
@@ -46,15 +46,52 @@ export async function removeWorkBuddyConfig({ configPath, now }) {
   return { config: next, backupPath: await atomicSave(configPath, next, now) };
 }
 
-export async function diagnoseWorkBuddyConfig({ configPath, gatewayUrl, apiKey, fetchImpl = fetch }) {
-  const checks = { json: false, entry: false, key: false, gateway: false };
+export async function restoreWorkBuddyConfig({ configPath, backupPath }) {
+  await unlink(configPath).catch((error) => { if (error.code !== "ENOENT") throw error; });
+  if (backupPath) await rename(backupPath, configPath);
+}
+
+export async function diagnoseWorkBuddyConfig({ configPath, gatewayUrl, apiKey, fetchImpl = fetch, exists = async (path) => { try { await access(path); return true; } catch { return false; } } }) {
+  const checks = { json: false, entry: false, command: false, bridge: false, key: false, gateway: false };
   try {
     const config = await readConfig(configPath);
     checks.json = true;
-    checks.entry = Boolean(config.mcpServers?.["xiaoye-image"]);
+    const entry = config.mcpServers?.["xiaoye-image"];
+    checks.entry = Boolean(entry);
+    checks.command = Boolean(entry?.command && await exists(entry.command));
+    checks.bridge = Boolean(entry?.args?.[0] && await exists(entry.args[0]));
     const response = await fetchImpl(new URL("/v1/account/balance", gatewayUrl), { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(10_000) });
     checks.key = response.ok;
     checks.gateway = response.status < 500;
   } catch { /* only return named checks; never echo secrets */ }
   return { ok: Object.values(checks).every(Boolean), checks };
+}
+
+export async function installVerifiedWorkBuddyConfig({
+  configPath,
+  gatewayUrl,
+  apiKey,
+  allowedRoots,
+  installDir,
+  repair = false,
+  now,
+  fetchImpl = fetch,
+  restrict = async () => {}
+}) {
+  const installed = await installWorkBuddyConfig({ configPath, gatewayUrl, apiKey, allowedRoots, installDir, repair, now });
+  try {
+    await restrict(configPath);
+    const diagnosis = await diagnoseWorkBuddyConfig({ configPath, gatewayUrl, apiKey, fetchImpl });
+    if (!diagnosis.ok) {
+      const error = new Error("workbuddy_config_self_check_failed");
+      error.code = "workbuddy_config_self_check_failed";
+      error.checks = diagnosis.checks;
+      throw error;
+    }
+    return { ...installed, diagnosis };
+  } catch (error) {
+    await restoreWorkBuddyConfig({ configPath, backupPath: installed.backupPath });
+    await restrict(configPath).catch(() => {});
+    throw error;
+  }
 }
