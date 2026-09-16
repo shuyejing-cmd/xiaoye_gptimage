@@ -455,7 +455,7 @@ git commit -m "feat: publish verified WorkBuddy installer bootstrap"
 - Create: `test/platform/prompt-install-flow.test.mjs`
 - Modify: `docs/superpowers/plans/2026-09-15-workbuddy-prompt-guided-installer.md`
 
-- [ ] **Step 1: Write the end-to-end API/install-flow test**
+- [x] **Step 1: Write the end-to-end API/install-flow test**
 
 Use PostgreSQL-memory services and temporary files to execute this sequence without a real external provider:
 
@@ -468,7 +468,7 @@ login -> create Key -> issue prompt -> extract installation token
 
 Assert the generated prompt, subprocess argument list, config backups, errors, and captured logs contain no `wb_live_` Key.
 
-- [ ] **Step 2: Run the E2E test and confirm it passes after integration**
+- [x] **Step 2: Run the E2E test and confirm it passes after integration**
 
 ```powershell
 node --test --test-isolation=none test/platform/prompt-install-flow.test.mjs
@@ -476,13 +476,13 @@ node --test --test-isolation=none test/platform/prompt-install-flow.test.mjs
 
 Expected: PASS. If it fails, change production units rather than weakening the assertions.
 
-- [ ] **Step 3: Update user and operator documentation**
+- [x] **Step 3: Update user and operator documentation**
 
 Document the three-step prompt flow first, then the installer and JSON fallbacks. Add production requirements for `INSTALLATION_TOKEN_PEPPER`, a signed 1.1.0 installer, exact publisher verification, stable/versioned install URLs, and WorkBuddy command-execution permission.
 
 Add launch checklist items for one successful prompt-guided install, expired/used token behavior, disabled WorkBuddy shell capability fallback, Windows 10/11 clean-user verification, and confirmation that long-lived Keys do not appear in prompt or logs.
 
-- [ ] **Step 4: Run complete verification**
+- [x] **Step 4: Run complete verification**
 
 ```powershell
 npm test
@@ -492,7 +492,7 @@ git diff --check
 
 Expected: all runnable tests PASS; the existing symlink test may skip on Windows when the current user cannot create symlinks. Build must exit 0 and diff check must report no errors.
 
-- [ ] **Step 5: Run local PostgreSQL smoke verification**
+- [x] **Step 5: Run local PostgreSQL smoke verification**
 
 Restart the API and worker with migration 6, then verify without printing secrets:
 

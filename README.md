@@ -74,11 +74,17 @@ curl -fsS https://your-domain.example/readyz
 
 ## 用户如何接入 WorkBuddy
 
-1. 在网站完成邮箱验证，新用户可看到注册赠送额度。
-2. 在“个人 Key”创建 Key；登录后可随时查看、复制完整 Key，并一键复制 WorkBuddy MCP JSON 配置。不要把 Key 发送到聊天或截图中。
-3. 下载已签名的 Windows 安装器，粘贴 Key并选择允许读取参考图的目录。
-4. 安装器调用 `/v1/account/balance` 验证 Key，备份 `%USERPROFILE%\.workbuddy\mcp.json`，只合并 `xiaoye-image`，不会覆盖其他 MCP。
-5. 在 WorkBuddy 调用 `generate_image`；任务超过 90 秒时用 `get_generation` 查询，用 `get_balance` 查看可用与冻结额度。
+最简单的接入只有三步：
+
+1. 在网站完成邮箱验证，并在“MCP Key”页面创建一个 Key。
+2. 点击“复制安装提示词”，把整段内容发送给 WorkBuddy；提示词只含 10 分钟有效、只能使用一次的安装码，不含长期 Key。
+3. WorkBuddy 说明操作后，允许一次本机命令执行。安装成功后开启 `xiaoye-image`；列表没有刷新时重启 WorkBuddy。
+
+自动流程会下载固定版本的官方 bootstrap 和安装器，校验 HTTPS、SHA-256、有效 Authenticode 签名及精确发布者，然后备份 WorkBuddy 配置、只合并 `xiaoye-image` 并调用 `/v1/account/balance` 自检。安装码通过当前用户临时文件传递，不进入 URL；长期 Key 不进入聊天、命令行或安装日志。
+
+WorkBuddy 不能执行本机命令时，使用网站的“下载安装器”手动安装。仍无法安装时，可在“MCP Key”页面复制完整 JSON 配置作为最后兜底；只有手动兜底需要直接处理 Key，不要把 Key 发到聊天或截图中。
+
+在 WorkBuddy 调用 `generate_image`；任务超过 90 秒时用 `get_generation` 查询，用 `get_balance` 查看可用与冻结额度。
 
 手动开发配置可使用 `IMAGE_API_KEY`；`IMAGE_GATEWAY_TOKEN` 仅为旧配置兼容：
 
@@ -102,14 +108,20 @@ curl -fsS https://your-domain.example/readyz
 
 ## 安装器发布
 
-构建机需安装 Inno Setup 6。未配置证书时只生成本地测试包，不会发布到网站；设置证书 SHA-1 后脚本使用 Authenticode 签名、验证，再复制到网站下载目录。
+生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`，并发布与 `WORKBUDDY_INSTALLER_VERSION` 一致的安装器。当前协议版本为 1.1.0，固定地址和版本地址分别为：
+
+- `https://xiaoyeai.cn/install/workbuddy-image-mcp.ps1`
+- `https://xiaoyeai.cn/install/workbuddy-image-mcp-1.1.0.json`
+- `https://xiaoyeai.cn/install/WorkBuddy-Image-MCP-Setup-1.1.0.exe`
+
+构建机需安装 Inno Setup 6。未配置证书时只生成本地测试包，不会写入网站目录；设置证书 SHA-1 后，脚本按“构建 → Authenticode 签名 → 验证签名和精确发布者 → SHA-256 → 清单 → 发布”的顺序执行。bootstrap 当前固定要求发布者主题为 `CN=Xiaoye AI`；正式购买证书后的主题必须与其完全一致，否则应在发布前审查并同时更新 bootstrap 与构建脚本中的固定值。
 
 ```powershell
 $env:CODE_SIGN_CERT_SHA1 = "certificate-thumbprint"
 npm run installer:build
 ```
 
-安装后开始菜单提供“检测连接”和“修复配置”；卸载时只删除 `xiaoye-image` 条目。公开发布前必须在无 Node.js、已有多个 MCP、损坏配置三种 Windows 环境中验证。
+安装后开始菜单提供“检测连接”和“修复配置”；卸载时只删除 `xiaoye-image` 条目。公开发布前必须在 Windows 10/11 的干净用户、无 Node.js、已有多个 MCP、默认/自定义配置路径和自定义安装目录中验证。还必须分别验证 WorkBuddy 允许命令执行时自动完成，以及禁止命令执行时正确展示手动下载兜底。
 
 ## 主要接口
 
