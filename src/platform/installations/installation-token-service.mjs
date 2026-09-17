@@ -2,7 +2,7 @@ import { createHmac, randomBytes as cryptoRandomBytes } from "node:crypto";
 import { AppError } from "../../shared/errors.mjs";
 import { withTransaction } from "../db/pool.mjs";
 
-const TOKEN_TTL_MS = 10 * 60 * 1000;
+const TOKEN_TTL_MS = 30 * 60 * 1000;
 const TOKEN_LIMIT = 5;
 
 function digest(pepper, value) {

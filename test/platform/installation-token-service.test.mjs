@@ -39,7 +39,7 @@ test("an installation token is stored as a digest and exchanged only once", asyn
   const { pool, userId, key, service } = await setup();
   const issued = await service.create({ userId, sessionId: "session-1", apiKeyId: key.id });
   assert.match(issued.token, /^wb_install_[A-Za-z0-9_-]{8}_[A-Za-z0-9_-]+$/);
-  assert.equal(new Date(issued.expiresAt).toISOString(), "2026-09-15T12:10:00.000Z");
+  assert.equal(new Date(issued.expiresAt).toISOString(), "2026-09-15T12:30:00.000Z");
   assert.equal(JSON.stringify((await pool.query("select * from installation_tokens")).rows).includes(issued.token), false);
 
   const results = await Promise.allSettled(Array.from({ length: 20 }, () => service.exchange(issued.token)));
@@ -55,8 +55,13 @@ test("expired, revoked-session, revoked-key, and suspended-account tokens are re
   const { pool, userId, apiKeyService, key, service, setNow } = await setup();
 
   const expired = await service.create({ userId, sessionId: "session-1", apiKeyId: key.id });
-  setNow(new Date("2026-09-15T12:10:01Z"));
-  await assert.rejects(service.exchange(expired.token), (error) => error.code === "installation_token_expired");
+  setNow(new Date("2026-09-15T12:29:59Z"));
+  assert.equal((await service.exchange(expired.token)).apiKey, key.key);
+
+  setNow(new Date("2026-09-15T12:00:00Z"));
+  const expiredAtBoundary = await service.create({ userId, sessionId: "session-1", apiKeyId: key.id });
+  setNow(new Date("2026-09-15T12:30:00Z"));
+  await assert.rejects(service.exchange(expiredAtBoundary.token), (error) => error.code === "installation_token_expired");
 
   setNow(new Date("2026-09-15T12:00:00Z"));
   const loggedOut = await service.create({ userId, sessionId: "session-1", apiKeyId: key.id });

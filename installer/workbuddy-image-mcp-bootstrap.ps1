@@ -1,11 +1,11 @@
 param(
   [Parameter(Mandatory=$true)][string]$TokenFile,
-  [string]$ManifestUrl = 'https://xiaoyeai.cn/install/workbuddy-image-mcp-1.1.0.json'
+  [string]$ManifestUrl = 'https://xiaoyeai.cn/install/workbuddy-image-mcp-1.2.0.json'
 )
 
 $ErrorActionPreference = 'Stop'
 $ExpectedPublisher = 'CN=Xiaoye AI'
-$ExpectedVersion = '1.1.0'
+$ExpectedVersion = '1.2.0'
 $ManifestPath = $null
 $InstallerPath = $null
 $ResultPath = $null

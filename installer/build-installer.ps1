@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $StageDir = Join-Path $PSScriptRoot 'stage'
 $OutputDir = Join-Path $PSScriptRoot 'output'
-$Version = '1.1.0'
+$Version = '1.2.0'
 $ExpectedPublisher = 'CN=Xiaoye AI'
 if (-not $StageDir.StartsWith($PSScriptRoot) -or -not $OutputDir.StartsWith($PSScriptRoot)) { throw 'Installer paths escaped the installer directory.' }
 $Iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source

@@ -8,15 +8,15 @@ import { buildReleaseManifest } from "../../installer/release-manifest.mjs";
 
 test("release manifest uses the stable public contract", () => {
   assert.deepEqual(buildReleaseManifest({
-    version: "1.1.0",
+    version: "1.2.0",
     sha256: "a".repeat(64),
     publisher: "CN=Xiaoye AI",
-    installerUrl: "https://xiaoyeai.cn/install/WorkBuddy-Image-MCP-Setup-1.1.0.exe"
+    installerUrl: "https://github.com/example/workbuddy/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe"
   }), {
-    version: "1.1.0",
+    version: "1.2.0",
     sha256: "a".repeat(64),
     publisher: "CN=Xiaoye AI",
-    installer_url: "https://xiaoyeai.cn/install/WorkBuddy-Image-MCP-Setup-1.1.0.exe"
+    installer_url: "https://github.com/example/workbuddy/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe"
   });
 });
 
@@ -85,7 +85,7 @@ test("release version and fixed publisher stay synchronized across artifacts", a
     config: config.match(/WORKBUDDY_INSTALLER_VERSION \|\| "([^"]+)"/)?.[1],
     app: app.match(/installerVersion = "([^"]+)"/)?.[1]
   };
-  assert.deepEqual(new Set(Object.values(values)), new Set(["1.1.0"]));
+  assert.deepEqual(new Set(Object.values(values)), new Set(["1.2.0"]));
   const publishers = {
     bootstrap: bootstrap.match(/\$ExpectedPublisher = '([^']+)'/)?.[1],
     build: build.match(/\$ExpectedPublisher = '([^']+)'/)?.[1]
