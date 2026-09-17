@@ -12,6 +12,17 @@ function isObject(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+export function isLegacyImageBridge(entry) {
+  if (!isObject(entry) || !isObject(entry.env) || !Array.isArray(entry.args)) return false;
+  let gateway;
+  try { gateway = new URL(entry.env.IMAGE_GATEWAY_URL); } catch { return false; }
+  const bridgePath = String(entry.args[0] || "").replaceAll("\\", "/").toLowerCase();
+  return gateway.origin === "https://xiaoyeai.cn"
+    && gateway.pathname.replace(/\/+$/, "") === ""
+    && Boolean(String(entry.env.IMAGE_GATEWAY_TOKEN || "").trim())
+    && bridgePath.endsWith("/src/index.mjs");
+}
+
 async function readConfig(configPath, repair = false) {
   try {
     const value = JSON.parse(await readFile(configPath, "utf8"));
@@ -57,9 +68,10 @@ async function atomicSave(configPath, value, now = () => Date.now(), restrictTem
   }
 }
 
-export async function installWorkBuddyConfig({ configPath, gatewayUrl, apiKey, allowedRoots, installDir, repair = false, now, restrictTemporary }) {
+export async function installWorkBuddyConfig({ configPath, gatewayUrl, apiKey, allowedRoots, installDir, repair = false, migrateLegacy = true, now, restrictTemporary }) {
   const current = await readConfig(configPath, repair);
   const next = { ...current, mcpServers: { ...(current.mcpServers || {}) } };
+  if (migrateLegacy && isLegacyImageBridge(next.mcpServers["image-bridge"])) delete next.mcpServers["image-bridge"];
   next.mcpServers["xiaoye-image"] = {
     command: join(installDir, "runtime", "node.exe").replaceAll("\\", "/"),
     args: [join(installDir, "app", "src", "index.mjs").replaceAll("\\", "/")],
@@ -162,7 +174,8 @@ export async function installVerifiedWorkBuddyConfig({
   mcpProbe = probeMcpEntry,
   afterVerified = async () => {}
 }) {
-  const installed = await installWorkBuddyConfig({ configPath, gatewayUrl, apiKey, allowedRoots, installDir, repair, now, restrictTemporary: restrict });
+  const installed = await installWorkBuddyConfig({ configPath, gatewayUrl, apiKey, allowedRoots, installDir, repair, migrateLegacy: false, now, restrictTemporary: restrict });
+  let migrationBackupPath = null;
   try {
     await restrict(configPath);
     const diagnosis = await diagnoseWorkBuddyConfig({ configPath, gatewayUrl, apiKey, fetchImpl, mcpProbe });
@@ -172,10 +185,19 @@ export async function installVerifiedWorkBuddyConfig({
       error.checks = diagnosis.checks;
       throw error;
     }
+    const verified = await readConfig(configPath);
+    if (isLegacyImageBridge(verified.mcpServers?.["image-bridge"])) {
+      const migrated = { ...verified, mcpServers: { ...verified.mcpServers } };
+      delete migrated.mcpServers["image-bridge"];
+      migrationBackupPath = await atomicSave(configPath, migrated, now, restrict);
+      await restrict(configPath);
+    }
     await afterVerified({ configPath, installed, diagnosis });
+    if (migrationBackupPath) await unlink(migrationBackupPath).catch(() => {});
     return { ...installed, diagnosis };
   } catch (error) {
     await restoreWorkBuddyConfig({ configPath, backupPath: installed.backupPath });
+    if (migrationBackupPath) await unlink(migrationBackupPath).catch(() => {});
     await restrict(configPath).catch(() => {});
     throw error;
   }

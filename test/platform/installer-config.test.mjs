@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { installWorkBuddyConfig, installVerifiedWorkBuddyConfig, removeWorkBuddyConfig, diagnoseWorkBuddyConfig, probeMcpEntry } from "../../installer/config-manager.mjs";
+import { installWorkBuddyConfig, installVerifiedWorkBuddyConfig, removeWorkBuddyConfig, diagnoseWorkBuddyConfig, probeMcpEntry, isLegacyImageBridge } from "../../installer/config-manager.mjs";
 import { discoverWorkBuddyConfig, readRememberedConfigPath, rememberConfigPath } from "../../installer/config-discovery.mjs";
 
 function createDiscoveryFixture(files = {}) {
@@ -139,6 +139,64 @@ test("verified installation restores the previous config when post-write diagnos
     mcpProbe: async () => false
   }), (error) => error.code === "workbuddy_config_self_check_failed");
   assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")), JSON.parse(original));
+});
+
+test("verified installation removes only the owned legacy image-bridge fingerprint", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "wb-legacy-migration-"));
+  const configPath = join(directory, "mcp.json");
+  const installDir = join(directory, "installed");
+  await mkdir(join(installDir, "runtime"), { recursive: true });
+  await mkdir(join(installDir, "app", "src"), { recursive: true });
+  await writeFile(join(installDir, "runtime", "node.exe"), "runtime");
+  await writeFile(join(installDir, "app", "src", "index.mjs"), "bridge");
+  const legacy = {
+    command: "C:/Program Files/nodejs/node.exe",
+    args: ["C:/Users/A/Documents/old/src/index.mjs"],
+    env: { IMAGE_GATEWAY_URL: "https://xiaoyeai.cn/", IMAGE_GATEWAY_TOKEN: "legacy-token" }
+  };
+  assert.equal(isLegacyImageBridge(legacy), true);
+  await writeFile(configPath, JSON.stringify({ mcpServers: { "image-bridge": legacy, notes: { command: "notes.exe" } } }));
+  await installVerifiedWorkBuddyConfig({
+    configPath,
+    gatewayUrl: "https://xiaoyeai.cn",
+    apiKey: "wb_live_public_secret",
+    allowedRoots: [],
+    installDir,
+    fetchImpl: async () => new Response("{}", { status: 200 }),
+    mcpProbe: async () => {
+      const duringSelfCheck = JSON.parse(await readFile(configPath, "utf8"));
+      assert.ok(duringSelfCheck.mcpServers["image-bridge"], "legacy entry must remain until the new entry passes self-check");
+      return true;
+    }
+  });
+  const saved = JSON.parse(await readFile(configPath, "utf8"));
+  assert.equal(saved.mcpServers["image-bridge"], undefined);
+  assert.deepEqual(saved.mcpServers.notes, { command: "notes.exe" });
+  assert.ok(saved.mcpServers["xiaoye-image"]);
+});
+
+test("a non-owned image-bridge is preserved and a failed migration restores the legacy entry", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "wb-legacy-rollback-"));
+  const configPath = join(directory, "mcp.json");
+  const unowned = { command: "node.exe", args: ["C:/custom/src/index.mjs"], env: { IMAGE_GATEWAY_URL: "https://other.example", IMAGE_GATEWAY_TOKEN: "token" } };
+  assert.equal(isLegacyImageBridge(unowned), false);
+  await writeFile(configPath, JSON.stringify({ mcpServers: { "image-bridge": unowned } }));
+  await installWorkBuddyConfig({ configPath, gatewayUrl: "https://xiaoyeai.cn", apiKey: "wb_live_public_secret", allowedRoots: [], installDir: directory });
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")).mcpServers["image-bridge"], unowned);
+
+  const owned = { command: "node.exe", args: ["C:/old/src/index.mjs"], env: { IMAGE_GATEWAY_URL: "https://xiaoyeai.cn", IMAGE_GATEWAY_TOKEN: "legacy-token" } };
+  const original = { mcpServers: { "image-bridge": owned, notes: { command: "notes.exe" } } };
+  await writeFile(configPath, JSON.stringify(original));
+  await assert.rejects(installVerifiedWorkBuddyConfig({
+    configPath,
+    gatewayUrl: "https://xiaoyeai.cn",
+    apiKey: "wb_live_public_secret",
+    allowedRoots: [],
+    installDir: directory,
+    fetchImpl: async () => new Response("{}", { status: 200 }),
+    mcpProbe: async () => false
+  }), (error) => error.code === "workbuddy_config_self_check_failed");
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")), original);
 });
 
 test("installer rejects structurally invalid JSON without rewriting it", async () => {
