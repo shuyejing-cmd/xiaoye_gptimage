@@ -31,8 +31,6 @@ export async function verifyPrivateTokenFile(tokenFile) {
       "if([string]::IsNullOrWhiteSpace($path)){exit 2}",
       "$acl=[System.IO.File]::GetAccessControl($path)",
       "$me=[System.Security.Principal.WindowsIdentity]::GetCurrent().User",
-      "$owner=$acl.GetOwner([System.Security.Principal.SecurityIdentifier])",
-      "if($owner.Value -ne $me.Value){exit 3}",
       "$rules=$acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])",
       "$unsafe=$rules | Where-Object {$_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -notin @($me.Value,'S-1-5-18','S-1-5-32-544')}",
       "if($unsafe){exit 4}"
