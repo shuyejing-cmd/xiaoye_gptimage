@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory=$true)][string]$TokenFile,
-  [string]$ManifestUrl = 'https://xiaoyeai.cn/install/workbuddy-image-mcp-1.2.0.json'
+  [Parameter(Mandatory=$true)][string]$ManifestUrl
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,26 +50,32 @@ try {
   $CleanupTokenFile = $FullTokenPath
 
   $ManifestPath = Get-TemporaryPath '.json'
-  Invoke-WebRequest -Uri $ManifestUri -OutFile $ManifestPath -UseBasicParsing -MaximumRedirection 0
+  Invoke-WebRequest -Uri $ManifestUri -OutFile $ManifestPath -UseBasicParsing
+  if ((Get-Item -LiteralPath $ManifestPath).Length -le 0) { throw 'installer_verification_failed: empty manifest' }
   $Manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
   if ($Manifest.version -ne $ExpectedVersion -or
       $Manifest.sha256 -notmatch '^[a-fA-F0-9]{64}$' -or
-      $Manifest.publisher -ne $ExpectedPublisher) {
+      $null -eq $Manifest.signed -or
+      $Manifest.signed.GetType() -ne [bool]) {
     throw 'installer_verification_failed: invalid manifest'
   }
   $InstallerUri = Assert-HttpsUrl $Manifest.installer_url 'installer URL'
 
   $InstallerPath = Get-TemporaryPath '.exe'
-  Invoke-WebRequest -Uri $InstallerUri -OutFile $InstallerPath -UseBasicParsing -MaximumRedirection 0
+  Invoke-WebRequest -Uri $InstallerUri -OutFile $InstallerPath -UseBasicParsing
+  if ((Get-Item -LiteralPath $InstallerPath).Length -lt 10MB) { throw 'installer_verification_failed: installer too small' }
   $ActualHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($ActualHash -cne ([string]$Manifest.sha256).ToLowerInvariant()) {
     throw 'installer_verification_failed: SHA-256 mismatch'
   }
-  $Signature = Get-AuthenticodeSignature -LiteralPath $InstallerPath
-  if ($Signature.Status -ne 'Valid' -or
-      $null -eq $Signature.SignerCertificate -or
-      $Signature.SignerCertificate.Subject -cne $ExpectedPublisher) {
-    throw 'installer_verification_failed: publisher signature mismatch'
+  if ($Manifest.signed) {
+    if ($Manifest.publisher -ne $ExpectedPublisher) { throw 'installer_verification_failed: publisher mismatch' }
+    $Signature = Get-AuthenticodeSignature -LiteralPath $InstallerPath
+    if ($Signature.Status -ne 'Valid' -or
+        $null -eq $Signature.SignerCertificate -or
+        $Signature.SignerCertificate.Subject -cne $ExpectedPublisher) {
+      throw 'installer_verification_failed: publisher signature mismatch'
+    }
   }
 
   $ResultPath = Get-TemporaryPath '.result'

@@ -1,16 +1,19 @@
 import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
-export function buildReleaseManifest({ version, sha256, publisher, installerUrl }) {
+export function buildReleaseManifest({ version, sha256, signed = false, publisher, installerUrl }) {
   if (!/^\d+\.\d+\.\d+$/.test(String(version || ""))) throw new Error("invalid release version");
   if (!/^[a-f0-9]{64}$/i.test(String(sha256 || ""))) throw new Error("invalid SHA-256 digest");
-  if (!String(publisher || "").trim()) throw new Error("publisher is required");
+  if (typeof signed !== "boolean") throw new Error("signed must be a boolean");
+  if (signed && !String(publisher || "").trim()) throw new Error("publisher is required for signed releases");
   const url = new URL(installerUrl);
   if (url.protocol !== "https:") throw new Error("installer URL must use HTTPS");
   return {
     version: String(version),
     sha256: String(sha256),
-    publisher: String(publisher),
+    channel: signed ? "stable" : "beta",
+    signed,
+    ...(signed ? { publisher: String(publisher) } : {}),
     installer_url: url.href
   };
 }
@@ -27,6 +30,7 @@ async function main() {
   const manifest = buildReleaseManifest({
     version: args["--version"],
     sha256: args["--sha256"],
+    signed: String(args["--signed"]).toLowerCase() === "true",
     publisher: args["--publisher"],
     installerUrl: args["--installer-url"]
   });

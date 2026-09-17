@@ -10,23 +10,25 @@ test("release manifest uses the stable public contract", () => {
   assert.deepEqual(buildReleaseManifest({
     version: "1.2.0",
     sha256: "a".repeat(64),
-    publisher: "CN=Xiaoye AI",
+    signed: false,
     installerUrl: "https://github.com/example/workbuddy/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe"
   }), {
     version: "1.2.0",
     sha256: "a".repeat(64),
-    publisher: "CN=Xiaoye AI",
+    channel: "beta",
+    signed: false,
     installer_url: "https://github.com/example/workbuddy/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe"
   });
+  assert.equal(buildReleaseManifest({ version: "1.2.0", sha256: "a".repeat(64), signed: true, publisher: "CN=Xiaoye AI", installerUrl: "https://github.com/example/workbuddy/releases/download/v1.2.0/setup.exe" }).publisher, "CN=Xiaoye AI");
 });
 
 test("release manifest rejects non-HTTPS installers and malformed fields", () => {
   assert.throws(() => buildReleaseManifest({ version: "1", sha256: "bad", publisher: "", installerUrl: "http://example.test/setup.exe" }));
 });
 
-test("bootstrap verifies transport, digest, signature, publisher, and cleanup before execution", async () => {
+test("bootstrap verifies transport, digest, optional signature, and cleanup before execution", async () => {
   const source = await readFile("installer/workbuddy-image-mcp-bootstrap.ps1", "utf8");
-  assert.match(source, /https:/i);
+  assert.match(source, /Scheme[^\n]+https/i);
   assert.match(source, /SecurityProtocol.*Tls12/);
   assert.ok(source.indexOf("ManifestPath") < source.indexOf("InstallerPath"), "manifest must be handled before installer");
   assert.match(source, /Get-FileHash[^\n]+SHA256/);
@@ -40,6 +42,9 @@ test("bootstrap verifies transport, digest, signature, publisher, and cleanup be
   assert.match(source, /Remove-Item[^\n]+TokenFile/i);
   assert.doesNotMatch(source, /Invoke-Expression/i);
   assert.doesNotMatch(source, /ExecutionPolicy\s+Bypass/i);
+  assert.match(source, /\[Parameter\(Mandatory=\$true\)\]\[string\]\$ManifestUrl/);
+  assert.doesNotMatch(source, /xiaoyeai\.cn\/install/);
+  assert.match(source, /if \(\$Manifest\.signed\)/);
 });
 
 test("bootstrap never deletes a rejected token path outside the user temp directory", { skip: process.platform !== "win32" }, async () => {
@@ -49,6 +54,7 @@ test("bootstrap never deletes a rejected token path outside the user temp direct
   try {
     await assert.rejects(promisify(execFile)("powershell.exe", [
       "-NoProfile", "-NonInteractive", "-File", "installer/workbuddy-image-mcp-bootstrap.ps1", "-TokenFile", tokenFile
+      , "-ManifestUrl", "https://github.com/example/workbuddy/releases/download/v1.2.0/workbuddy-image-mcp-1.2.0.json"
     ], { windowsHide: true }));
     await access(tokenFile);
     assert.equal(await readFile(tokenFile, "utf8"), "keep-me");
@@ -57,16 +63,30 @@ test("bootstrap never deletes a rejected token path outside the user temp direct
   }
 });
 
-test("unsigned installer builds cannot publish into website directories", async () => {
+test("unsigned installer builds stage all three GitHub release assets without website publishing", async () => {
   const source = await readFile("installer/build-installer.ps1", "utf8");
-  const signedBranch = source.indexOf("if ($env:CODE_SIGN_CERT_SHA1)");
-  const installPublish = source.indexOf("web\\public\\install");
-  const downloadsPublish = source.indexOf("web\\public\\downloads");
-  assert.ok(signedBranch >= 0 && installPublish > signedBranch && downloadsPublish > signedBranch);
+  assert.match(source, /WORKBUDDY_RELEASE_REPOSITORY/);
+  assert.match(source, /WorkBuddy-Image-MCP-Setup-\$Version\.exe/);
+  assert.match(source, /workbuddy-image-mcp-\$Version\.json/);
+  assert.match(source, /workbuddy-image-mcp\.ps1/);
+  assert.doesNotMatch(source, /web\\public\\(?:install|downloads)/);
   assert.match(source, /Get-FileHash[^\n]+SHA256/);
   assert.match(source, /release-manifest\.mjs/);
   assert.match(source, /Set-AuthenticodeSignature/);
-  assert.match(source, /Copy-Item -LiteralPath \$SignedBootstrapPath/);
+  assert.match(source, /--signed=\$Signed/);
+});
+
+test("GitHub Actions publishes one validated v1.2.0 release atomically", async () => {
+  const source = await readFile(".github/workflows/release.yml", "utf8");
+  assert.match(source, /v1\.2\.0/);
+  assert.match(source, /node-version:\s*22/);
+  assert.match(source, /npm test/);
+  assert.match(source, /npm run web:build/);
+  assert.match(source, /installer:build/);
+  for (const name of ["workbuddy-image-mcp.ps1", "workbuddy-image-mcp-1.2.0.json", "WorkBuddy-Image-MCP-Setup-1.2.0.exe"]) assert.match(source, new RegExp(name.replaceAll(".", "\\.")));
+  assert.match(source, /--draft/);
+  assert.match(source, /release delete/);
+  assert.match(source, /release edit[^\n]+--draft=false/);
 });
 
 test("release version and fixed publisher stay synchronized across artifacts", async () => {
@@ -79,7 +99,6 @@ test("release version and fixed publisher stay synchronized across artifacts", a
   ]);
   const values = {
     bootstrap: bootstrap.match(/\$ExpectedVersion = '([^']+)'/)?.[1],
-    manifestUrl: bootstrap.match(/workbuddy-image-mcp-(\d+\.\d+\.\d+)\.json/)?.[1],
     build: build.match(/\$Version = '([^']+)'/)?.[1],
     inno: inno.match(/^AppVersion=(.+)$/m)?.[1].trim(),
     config: config.match(/WORKBUDDY_INSTALLER_VERSION \|\| "([^"]+)"/)?.[1],
