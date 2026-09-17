@@ -50,7 +50,7 @@ services:
     restart: unless-stopped
     env_file: .env
     volumes:
-      - legacy-tasks-data:/app/data
+      - tasks-data:/app/data
     networks: [internal]
 
   caddy:
@@ -70,7 +70,7 @@ services:
 volumes:
   postgres-data:
   postgres-backups:
-  legacy-tasks-data:
+  tasks-data:
   caddy-data:
   caddy-config:
 networks:
