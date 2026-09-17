@@ -25,11 +25,21 @@ function validManifest(overrides = {}) {
 
 function fetcher({ manifest = validManifest(), bootstrapBody = bootstrap, installerBody = installer } = {}) {
   const calls = [];
+  const releaseApiUrl = `https://api.github.com/repos/${repository}/releases/tags/v${version}`;
   const fetchImpl = async (url) => {
     calls.push(url);
     if (url === assets.manifestUrl) return response(JSON.stringify(manifest));
     if (url === assets.bootstrapUrl) return response(bootstrapBody);
-    if (url === assets.installerUrl) return response(installerBody);
+    if (url === releaseApiUrl) return response(JSON.stringify({
+      tag_name: `v${version}`,
+      assets: [{
+        name: `WorkBuddy-Image-MCP-Setup-${version}.exe`,
+        state: "uploaded",
+        size: installerBody.length,
+        digest: `sha256:${createHash("sha256").update(installerBody).digest("hex")}`,
+        browser_download_url: assets.installerUrl
+      }]
+    }));
     return response("missing", 404);
   };
   return { calls, fetchImpl };
@@ -61,6 +71,41 @@ test("release status validates all assets and caches the result for five minutes
   now += 2;
   await service.getStatus();
   assert.equal(fake.calls.length, 6);
+});
+
+test("release status verifies the installer from GitHub asset metadata without downloading the binary", async () => {
+  const calls = [];
+  const releaseApiUrl = `https://api.github.com/repos/${repository}/releases/tags/v${version}`;
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url === assets.manifestUrl) return response(JSON.stringify(validManifest()));
+    if (url === assets.bootstrapUrl) return response(bootstrap);
+    if (url === releaseApiUrl) {
+      return response(JSON.stringify({
+        tag_name: `v${version}`,
+        assets: [{
+          name: `WorkBuddy-Image-MCP-Setup-${version}.exe`,
+          state: "uploaded",
+          size: 25 * 1024 * 1024,
+          digest: `sha256:${sha256}`,
+          browser_download_url: assets.installerUrl
+        }]
+      }));
+    }
+    if (url === assets.installerUrl) throw new Error("installer_binary_should_not_be_downloaded");
+    return response("missing", 404);
+  };
+
+  const service = createReleaseService({
+    repository,
+    version,
+    fetchImpl,
+    minBootstrapBytes: bootstrap.length,
+    minInstallerBytes: installer.length
+  });
+
+  assert.equal((await service.getStatus()).ready, true);
+  assert.equal(calls.includes(assets.installerUrl), false);
 });
 
 for (const [name, options] of [

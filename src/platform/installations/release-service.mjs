@@ -1,9 +1,8 @@
-import { createHash } from "node:crypto";
-
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_MIN_BOOTSTRAP_BYTES = 1024;
 const DEFAULT_MIN_INSTALLER_BYTES = 10 * 1024 * 1024;
 const MAX_ASSET_BYTES = 256 * 1024 * 1024;
+const RELEASE_CHECK_TIMEOUT_MS = 15_000;
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 export function buildGitHubReleaseAssets({ repository, version }) {
@@ -20,8 +19,16 @@ export function buildGitHubReleaseAssets({ repository, version }) {
   };
 }
 
-async function download(fetchImpl, url, { minimumBytes = 1, maximumBytes = MAX_ASSET_BYTES } = {}) {
-  const response = await fetchImpl(url, { redirect: "follow", headers: { accept: "application/octet-stream" } });
+async function download(fetchImpl, url, {
+  minimumBytes = 1,
+  maximumBytes = MAX_ASSET_BYTES,
+  accept = "application/octet-stream"
+} = {}) {
+  const response = await fetchImpl(url, {
+    redirect: "follow",
+    headers: { accept, "user-agent": "workbuddy-commercial-platform/1.2.0" },
+    signal: AbortSignal.timeout(RELEASE_CHECK_TIMEOUT_MS)
+  });
   if (!response?.ok) throw new Error("release_asset_unavailable");
   const declared = Number(response.headers?.get?.("content-length"));
   if (Number.isFinite(declared) && (declared < minimumBytes || declared > maximumBytes)) throw new Error("release_asset_size_invalid");
@@ -57,9 +64,26 @@ export function createReleaseService({
       try { manifest = JSON.parse(manifestBytes.toString("utf8")); } catch { throw new Error("release_manifest_invalid"); }
       if (manifest?.version !== version || manifest?.installer_url !== assets.installerUrl || !/^[a-f0-9]{64}$/i.test(String(manifest?.sha256 || ""))) throw new Error("release_manifest_invalid");
       await download(fetchImpl, assets.bootstrapUrl, { minimumBytes: minBootstrapBytes, maximumBytes: 1024 * 1024 });
-      const installer = await download(fetchImpl, assets.installerUrl, { minimumBytes: minInstallerBytes });
-      const digest = createHash("sha256").update(installer).digest("hex");
-      if (digest.toLowerCase() !== manifest.sha256.toLowerCase()) throw new Error("release_hash_mismatch");
+      const releaseApiUrl = `https://api.github.com/repos/${repository}/releases/tags/v${version}`;
+      const releaseBytes = await download(fetchImpl, releaseApiUrl, {
+        maximumBytes: 2 * 1024 * 1024,
+        accept: "application/vnd.github+json"
+      });
+      let release;
+      try { release = JSON.parse(releaseBytes.toString("utf8")); } catch { throw new Error("release_metadata_invalid"); }
+      const installerName = `WorkBuddy-Image-MCP-Setup-${version}.exe`;
+      const installerAsset = release?.tag_name === `v${version}`
+        ? release.assets?.find((asset) => asset?.name === installerName)
+        : null;
+      const digest = String(installerAsset?.digest || "");
+      if (installerAsset?.state !== "uploaded" ||
+          installerAsset?.browser_download_url !== assets.installerUrl ||
+          !Number.isFinite(installerAsset?.size) ||
+          installerAsset.size < minInstallerBytes ||
+          installerAsset.size > MAX_ASSET_BYTES ||
+          digest.toLowerCase() !== `sha256:${manifest.sha256}`.toLowerCase()) {
+        throw new Error("release_asset_invalid");
+      }
       return {
         ready: true,
         version,
