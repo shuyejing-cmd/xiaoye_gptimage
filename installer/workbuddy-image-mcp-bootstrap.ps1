@@ -33,13 +33,12 @@ function Resolve-PrivateTokenFile([string]$Value) {
   }
   $Acl = [System.IO.File]::GetAccessControl($FullPath)
   $Me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-  $Owner = $Acl.GetOwner([System.Security.Principal.SecurityIdentifier])
   $Rules = $Acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
   $Unsafe = $Rules | Where-Object {
     $_.AccessControlType -eq 'Allow' -and
     $_.IdentityReference.Value -notin @($Me.Value, 'S-1-5-18', 'S-1-5-32-544')
   }
-  if ($Owner.Value -ne $Me.Value -or $Unsafe) { throw 'installation_token_file_insecure' }
+  if ($Unsafe) { throw 'installation_token_file_insecure' }
   return $FullPath
 }
 
