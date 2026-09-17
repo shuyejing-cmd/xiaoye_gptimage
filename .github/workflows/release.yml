@@ -1,0 +1,68 @@
+name: Release WorkBuddy Image MCP
+
+on:
+  push:
+    tags:
+      - v1.2.0
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --no-progress -y
+      - name: Build release assets
+        shell: powershell
+        env:
+          WORKBUDDY_RELEASE_REPOSITORY: ${{ github.repository }}
+        run: npm run installer:build
+      - name: Validate release assets
+        shell: powershell
+        run: |
+          $assets = @(
+            'installer/output/workbuddy-image-mcp.ps1',
+            'installer/output/workbuddy-image-mcp-1.2.0.json',
+            'installer/output/WorkBuddy-Image-MCP-Setup-1.2.0.exe'
+          )
+          foreach ($asset in $assets) {
+            if (-not (Test-Path -LiteralPath $asset) -or (Get-Item -LiteralPath $asset).Length -le 0) {
+              throw "Missing or empty release asset: $asset"
+            }
+          }
+          $manifest = Get-Content -LiteralPath $assets[1] -Raw | ConvertFrom-Json
+          $actual = (Get-FileHash -LiteralPath $assets[2] -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($manifest.version -ne '1.2.0' -or $manifest.sha256 -cne $actual) { throw 'Release manifest does not match the installer.' }
+      - name: Publish complete GitHub Release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $created = $false
+          try {
+            gh release create $tag --verify-tag --draft --title "WorkBuddy Image MCP $tag" --notes "公开内测版；Windows 可能显示未知发布者。"
+            $created = $true
+            gh release upload $tag `
+              'installer/output/workbuddy-image-mcp.ps1' `
+              'installer/output/workbuddy-image-mcp-1.2.0.json' `
+              'installer/output/WorkBuddy-Image-MCP-Setup-1.2.0.exe'
+            $names = @(gh release view $tag --json assets --jq '.assets[].name')
+            $expected = @('workbuddy-image-mcp.ps1', 'workbuddy-image-mcp-1.2.0.json', 'WorkBuddy-Image-MCP-Setup-1.2.0.exe')
+            if (@(Compare-Object $expected $names).Count -ne 0) { throw 'GitHub Release asset set is incomplete.' }
+            gh release edit $tag --draft=false
+          } catch {
+            if ($created) { gh release delete $tag --yes }
+            throw
+          }

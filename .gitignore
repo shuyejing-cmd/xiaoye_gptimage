@@ -1,0 +1,9 @@
+node_modules/
+installer/output/
+installer/stage/
+.env
+*.log
+*.pfx
+*.p12
+*.pem
+*.key
