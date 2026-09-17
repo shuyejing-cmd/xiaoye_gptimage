@@ -11,7 +11,7 @@ import { createInstallationTokenService } from "../../src/platform/installations
 import { createRateLimiter } from "../../src/platform/http/rate-limiter.mjs";
 import { createPlatformApp } from "../../src/platform/http/platform-app.mjs";
 
-async function setup({ publicRegistrationEnabled = true, cookieSecure = true, releaseService = { getStatus: async () => ({ ready: true, version: "1.2.0", manifest_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp-1.2.0.json" }) } } = {}) {
+async function setup({ publicRegistrationEnabled = true, cookieSecure = true, releaseService = { getStatus: async () => ({ ready: true, version: "1.2.0", bootstrap_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp.ps1", manifest_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp-1.2.0.json", installer_url: "https://github.com/owner/repository/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe" }) } } = {}) {
   const memory = newDb({ autoCreateForeignKeyIndices: true, noAstCoverageCheck: true });
   const { Pool } = memory.adapters.createPg();
   const pool = new Pool();

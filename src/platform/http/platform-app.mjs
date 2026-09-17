@@ -168,7 +168,7 @@ export function createPlatformApp({
     const issued = await installationTokenService.create({ userId: session.user.id, sessionId: session.sessionId, apiKeyId: request.params.id });
     reply.header("Cache-Control", "no-store");
     return reply.code(201).send({
-      prompt: buildWorkBuddyInstallPrompt({ installationToken: issued.token, version: installerVersion, origin: publicOrigin }),
+      prompt: buildWorkBuddyInstallPrompt({ installationToken: issued.token, release }),
       expires_at: issued.expiresAt
     });
   });

@@ -40,13 +40,20 @@ test("prompt-guided install keeps the long-lived Key out of prompts, arguments, 
     authService,
     apiKeyService,
     installationTokenService,
+    releaseService: { getStatus: async () => ({
+      ready: true,
+      version: "1.2.0",
+      bootstrap_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp.ps1",
+      manifest_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp-1.2.0.json",
+      installer_url: "https://github.com/owner/repository/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe"
+    }) },
     walletService,
     generationJobs: createGenerationJobs({ pool, cipher: createPayloadCipher({ key: Buffer.alloc(32, 4) }) }),
     rateLimiter: createRateLimiter({ pool }),
     temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) },
     publicRegistrationEnabled: true,
     publicOrigin: "https://xiaoyeai.cn",
-    installerVersion: "1.1.0",
+    installerVersion: "1.2.0",
     readyCheck: async () => true
   });
 
