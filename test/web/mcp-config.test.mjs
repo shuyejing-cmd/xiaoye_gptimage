@@ -18,3 +18,14 @@ test("formats prompt installation feedback and expiry", () => {
   const localExpiry = new Date(2026, 8, 15, 12, 10, 0);
   assert.match(mcpConfig.formatInstallExpiry(localExpiry, "zh-CN"), /12:10/);
 });
+
+test("normalizes release status for ready, pending, and network failure states", () => {
+  assert.deepEqual(mcpConfig.installReleaseView({ ready: true, version: "1.2.0", installer_url: "https://github.com/owner/repo/setup.exe" }), {
+    ready: true,
+    label: "安装服务已就绪 · v1.2.0",
+    installerUrl: "https://github.com/owner/repo/setup.exe"
+  });
+  assert.equal(mcpConfig.installReleaseView({ ready: false, version: "1.2.0", message: "安装服务准备中" }).label, "安装服务准备中");
+  assert.equal(mcpConfig.installReleaseView(null).label, "正在检查安装服务…");
+  assert.equal(mcpConfig.installReleaseView(null, "网络不可用").label, "无法确认安装服务状态，请刷新页面后重试");
+});

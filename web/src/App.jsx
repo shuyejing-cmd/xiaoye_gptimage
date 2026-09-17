@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatInstallExpiry, installationPromptStatus } from "./mcp-config.js";
+import { formatInstallExpiry, installationPromptStatus, installReleaseView } from "./mcp-config.js";
 import { requestHeaders } from "./http-options.js";
 import { createKeyWithPrompt, isPromptExpired } from "./key-page-flow.js";
 
@@ -28,6 +28,17 @@ function Status({ value }) {
 
 function Empty({ children }) { return <div className="empty"><span>—</span><p>{children}</p></div>; }
 function Loading({ children = "正在读取…" }) { return <div className="loading" role="status"><span/><p>{children}</p></div>; }
+
+function useInstallRelease() {
+  const [status, setStatus] = useState(null), [loadError, setLoadError] = useState("");
+  const reload = useCallback(async () => {
+    setLoadError("");
+    try { setStatus(await api("/api/install-release/status")); }
+    catch (error) { setStatus(null); setLoadError(error.message); }
+  }, []);
+  useEffect(() => { reload(); }, [reload]);
+  return { ...installReleaseView(status, loadError), reload };
+}
 
 function Login({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -85,6 +96,7 @@ function Overview({ me }) {
 
 function Keys() {
   const [keys, setKeys] = useState([]), [error, setError] = useState(""), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [issuing, setIssuing] = useState(""), [copyState, setCopyState] = useState({}), [prompts, setPrompts] = useState({}), [clock, setClock] = useState(Date.now());
+  const release = useInstallRelease();
   const load = useCallback(() => api("/api/api-keys").then(x => setKeys(x.keys)).finally(()=>setLoading(false)), []);
   useEffect(() => { load().catch(e => setError(e.message)); }, [load]);
   useEffect(() => {
@@ -99,11 +111,13 @@ function Keys() {
       const result = await createKeyWithPrompt({
         request: api,
         name: "WorkBuddy Windows",
+        issuePrompt: release.ready,
         onKeyCreated: key => {
           setKeys(current => [key, ...current]);
-          setPrompts(current => ({ ...current, [key.id]: { loading: true, expanded: true, prompt: "", expiresAt: null, error: "" } }));
+          if (release.ready) setPrompts(current => ({ ...current, [key.id]: { loading: true, expanded: true, prompt: "", expiresAt: null, error: "" } }));
         }
       });
+      if (result.promptSkipped) return;
       setPrompts(current => ({
         ...current,
         [result.key.id]: result.prompt
@@ -133,6 +147,7 @@ function Keys() {
     }
   };
   const issuePrompt = async id => {
+    if (!release.ready) return;
     setIssuing(id); setError("");
     setPrompts(current => ({ ...current, [id]: { ...current[id], loading: true, expanded: true, error: "" } }));
     try {
@@ -146,6 +161,7 @@ function Keys() {
   const togglePrompt = id => setPrompts(current => ({ ...current, [id]: { ...current[id], expanded: !current[id]?.expanded } }));
   return <section className="page"><header className="page-head"><h1>个人 MCP Key</h1><p>创建后会自动生成一段安装提示词。复制提示词给 WorkBuddy，确认执行后即可完成安装。</p></header>
     <div className="toolbar"><button className="primary" onClick={create} disabled={busy}>{busy ? "正在处理…" : "创建新 Key"}</button><span>{keys.filter(x=>x.status==="active").length} / 3 个有效</span></div>
+    <div className={`release-strip ${release.ready ? "ready" : "pending"}`} role="status"><div><b>{release.label}</b><p>{release.ready ? "安装提示词 30 分钟有效且只能使用一次。" : "Key 仍可正常创建；Release 完整通过校验后即可生成安装提示词。"}</p></div>{release.ready && release.installerUrl ? <div className="release-download"><a href={release.installerUrl} target="_blank" rel="noreferrer">手动下载安装器</a><small>当前为公开内测版，Windows可能显示“未知发布者”提示。请确认下载地址来自本项目官方GitHub Release。</small></div> : <button className="text-button" onClick={release.reload}>重新检查</button>}</div>
     {error && <p className="error" role="alert">{error}</p>}
     <div className="key-list">{loading ? <Loading/> : keys.length ? keys.map(key => {
       const promptState = prompts[key.id];
@@ -154,12 +170,12 @@ function Keys() {
       return <article className="key-entry" key={key.id}>
         <div className="key-entry-head"><div><h2>{key.name}</h2><small>创建于 {key.createdAt ? new Date(key.createdAt).toLocaleString("zh-CN") : "刚刚"}</small></div><div className="key-meta"><Status value={key.status}/><small>{key.lastUsedAt ? `最近使用 ${new Date(key.lastUsedAt).toLocaleString("zh-CN")}` : "尚未使用"}</small>{key.status === "active" && <button disabled={busy} className="danger-text" onClick={() => deleteKey(key.id)}>删除</button>}</div></div>
         <section className="key-secret-section"><h3>个人 Key</h3><div className="key-secret-row"><code className="full-key">{key.key || `wb_live_${key.prefix}_••••••••`}</code>{key.key && <button onClick={() => copy(key.id, "key", key.key)}>复制 Key</button>}</div>{!key.key && key.status === "active" && <p className="key-unrecoverable">该 Key 的完整内容不可恢复。若需要复制，请删除后重新创建。</p>}</section>
-        {key.status === "active" && <section className="prompt-section"><div className="prompt-header"><div><h3>WorkBuddy 安装提示词</h3><p>提示词只在当前页面临时显示，复制后粘贴给 WorkBuddy。</p></div>{promptState?.prompt && !expired && <button className="text-button" aria-expanded={Boolean(promptState.expanded)} aria-controls={panelId} onClick={() => togglePrompt(key.id)}>{promptState.expanded ? "收起" : "展开"}</button>}</div>
-          {!promptState && <div className="prompt-state"><p>当前页面还没有为这个 Key 生成安装提示词。</p><button className="primary" onClick={() => issuePrompt(key.id)}>生成安装提示词</button></div>}
+        {key.status === "active" && <section className="prompt-section"><div className="prompt-header"><div><h3>WorkBuddy 安装提示词</h3><p>生成后 30 分钟有效且只能使用一次；复制后直接粘贴给 WorkBuddy。</p></div>{promptState?.prompt && !expired && <button className="text-button" aria-expanded={Boolean(promptState.expanded)} aria-controls={panelId} onClick={() => togglePrompt(key.id)}>{promptState.expanded ? "收起" : "展开"}</button>}</div>
+          {!promptState && <div className="prompt-state"><p>{release.ready ? "当前页面还没有为这个 Key 生成安装提示词。" : "安装服务准备中，暂时不能生成安装提示词。"}</p><button className="primary" disabled={!release.ready || issuing === key.id} onClick={() => issuePrompt(key.id)}>生成安装提示词</button></div>}
           {promptState?.loading && <Loading>正在生成安装提示词…</Loading>}
-          {promptState?.error && !promptState.loading && <div className="prompt-state error" role="alert"><p>提示词生成失败：{promptState.error}</p><button onClick={() => issuePrompt(key.id)}>重试</button></div>}
-          {expired && !promptState.loading && <div className="prompt-state"><p>这段安装提示词已过期，请重新生成。</p><button className="primary" onClick={() => issuePrompt(key.id)}>重新生成</button></div>}
-          {promptState?.prompt && !expired && <div id={panelId} className="prompt-body" hidden={!promptState.expanded}><div className="prompt-actions"><button className="primary" onClick={() => copy(key.id, "prompt", promptState.prompt)}>复制提示词</button><button disabled={issuing === key.id} onClick={() => issuePrompt(key.id)}>{issuing === key.id ? "正在生成…" : "重新生成"}</button><span aria-live="polite">{copyState.id === key.id ? copyState.message : ""}</span></div><pre tabIndex="0">{promptState.prompt}</pre><small>有效至 {formatInstallExpiry(promptState.expiresAt)}</small></div>}
+          {promptState?.error && !promptState.loading && <div className="prompt-state error" role="alert"><p>提示词生成失败：{promptState.error}</p><button disabled={!release.ready} onClick={() => issuePrompt(key.id)}>重试</button></div>}
+          {expired && !promptState.loading && <div className="prompt-state"><p>这段安装提示词已过期，请重新生成。</p><button className="primary" disabled={!release.ready || issuing === key.id} onClick={() => issuePrompt(key.id)}>重新生成</button></div>}
+          {promptState?.prompt && !expired && <div id={panelId} className="prompt-body" hidden={!promptState.expanded}><div className="prompt-actions"><button className="primary" disabled={!release.ready} onClick={() => copy(key.id, "prompt", promptState.prompt)}>复制提示词</button><button disabled={!release.ready || issuing === key.id} onClick={() => issuePrompt(key.id)}>{issuing === key.id ? "正在生成…" : "重新生成"}</button><span aria-live="polite">{copyState.id === key.id ? copyState.message : ""}</span></div><pre tabIndex="0">{promptState.prompt}</pre><small>30 分钟内有效且只能使用一次 · 准确过期时间 {formatInstallExpiry(promptState.expiresAt)}</small></div>}
         </section>}
       </article>;
     }) : <Empty>还没有 Key。创建后会自动显示可复制的 WorkBuddy 安装提示词。</Empty>}</div>
@@ -181,8 +197,9 @@ function Recharge() {
 }
 
 function Install() {
+  const release = useInstallRelease();
   return <section className="page"><header className="page-head"><h1>把图片 MCP 装进 WorkBuddy</h1><p>正常流程不需要判断 Node.js、安装目录或配置路径，只需复制一段提示词。</p></header>
-    <div className="install-flow"><ol><li><b>创建个人 Key</b><p>前往“MCP Key”页面，选择一个有效 Key。</p></li><li><b>复制提示词给 WorkBuddy</b><p>点击“复制提示词”，粘贴到 WorkBuddy 对话中。</p></li><li><b>允许执行并开启 MCP</b><p>确认一次本机执行权限；安装完成后开启 xiaoye-image，必要时重启 WorkBuddy。</p></li></ol><div className="download-plate"><Icon name="install"/><h2>手动备用安装</h2><p>WorkBuddy 不能执行本机命令时使用。</p><a className="primary" href="/downloads/WorkBuddy-Image-MCP-Setup.exe">下载安装器</a><small>个人 Key 可在“MCP Key”页面复制。</small></div></div>
+    <div className="install-flow"><ol><li><b>创建个人 Key</b><p>前往“MCP Key”页面创建一个有效 Key。</p></li><li><b>复制提示词给 WorkBuddy</b><p>生成 30 分钟有效、只能使用一次的安装提示词并粘贴到 WorkBuddy。</p></li><li><b>确认一次执行权限</b><p>WorkBuddy 自动下载、验证和运行固定版本安装器，并安全合并配置。</p></li><li><b>开启并检查连接</b><p>开启 xiaoye-image；如果没有出现就重启 WorkBuddy，再调用 get_balance 确认余额。</p></li></ol><div className="download-plate"><Icon name="install"/><h2>手动备用安装</h2><p>{release.ready ? "WorkBuddy 不能执行本机命令时使用。" : release.label}</p>{release.ready && release.installerUrl ? <a className="primary" href={release.installerUrl} target="_blank" rel="noreferrer">下载安装器</a> : <button className="primary" disabled>安装服务准备中</button>}<small>当前为公开内测版，Windows可能显示“未知发布者”提示。请确认下载地址来自本项目官方GitHub Release。</small>{!release.ready && <button className="text-button release-retry" onClick={release.reload}>重新检查</button>}</div></div>
   </section>;
 }
 

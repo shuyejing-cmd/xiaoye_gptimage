@@ -4,5 +4,12 @@ export function installationPromptStatus({ copied }) {
 
 export function formatInstallExpiry(value, locale = "zh-CN") {
   const date = value instanceof Date ? value : new Date(value);
-  return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+  return date.toLocaleString(locale, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+export function installReleaseView(status, loadError = "") {
+  if (loadError) return { ready: false, label: "无法确认安装服务状态，请刷新页面后重试", installerUrl: null };
+  if (!status) return { ready: false, label: "正在检查安装服务…", installerUrl: null };
+  if (status.ready) return { ready: true, label: `安装服务已就绪 · v${status.version}`, installerUrl: status.installer_url || null };
+  return { ready: false, label: status.message || "安装服务准备中", installerUrl: null };
 }
