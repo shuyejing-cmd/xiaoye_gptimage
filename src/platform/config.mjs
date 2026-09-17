@@ -17,10 +17,12 @@ export function loadPlatformConfig(env = process.env) {
   requireValues(env, [imageProvider === "gpt_ge" ? "GPT_GE_API_KEY" : "APIMART_API_KEY"]);
   const publicOrigin = env.PUBLIC_ORIGIN || "https://xiaoyeai.cn";
   const installerVersion = env.WORKBUDDY_INSTALLER_VERSION || "1.2.0";
+  const releaseRepository = String(env.WORKBUDDY_RELEASE_REPOSITORY || "").trim() || null;
   let originUrl;
   try { originUrl = new URL(publicOrigin); } catch { /* validated below */ }
   if (!originUrl || originUrl.protocol !== "https:") throw new AppError({ code: "invalid_config", message: "PUBLIC_ORIGIN must be an HTTPS origin", httpStatus: 500 });
   if (!/^\d+\.\d+\.\d+$/.test(installerVersion)) throw new AppError({ code: "invalid_config", message: "WORKBUDDY_INSTALLER_VERSION must use major.minor.patch", httpStatus: 500 });
+  if (releaseRepository && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(releaseRepository)) throw new AppError({ code: "invalid_config", message: "WORKBUDDY_RELEASE_REPOSITORY must use owner/repository", httpStatus: 500 });
   return {
     databaseUrl: env.DATABASE_URL,
     authPepper: env.AUTH_PEPPER,
@@ -34,6 +36,7 @@ export function loadPlatformConfig(env = process.env) {
     cookieSecure: env.COOKIE_SECURE !== "false",
     publicOrigin: originUrl.origin,
     installerVersion,
+    releaseRepository,
     port: Number(env.PORT || 3000),
     cos: { secretId: env.COS_SECRET_ID, secretKey: env.COS_SECRET_KEY, bucket: env.COS_BUCKET, region: env.COS_REGION, prefix: env.COS_PREFIX || "private/workbuddy-images" },
     gptGe: { apiKey: env.GPT_GE_API_KEY, baseUrl: env.GPT_GE_BASE_URL || "https://api.gpt.ge/v1" },

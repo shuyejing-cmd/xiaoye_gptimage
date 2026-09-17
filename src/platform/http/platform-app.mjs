@@ -39,6 +39,7 @@ export function createPlatformApp({
   authService,
   apiKeyService,
   installationTokenService,
+  releaseService,
   walletService,
   generationJobs,
   paymentService,
@@ -152,9 +153,17 @@ export function createPlatformApp({
   });
   app.delete("/api/api-keys/:id", async (request) => apiKeyService.delete({ userId: (await websiteUser(request)).id, keyId: request.params.id }));
 
+  app.get("/api/install-release/status", async (request) => {
+    await websiteUser(request);
+    if (!releaseService) return { ready: false, version: installerVersion, manifest_url: null, message: "安装服务准备中" };
+    return releaseService.getStatus();
+  });
+
   app.post("/api/api-keys/:id/installation-token", async (request, reply) => {
     if (!installationTokenService) throw new AppError({ code: "installations_unavailable", message: "自动安装服务暂不可用", httpStatus: 503 });
     const session = await websiteSession(request);
+    const release = releaseService ? await releaseService.getStatus() : null;
+    if (!release?.ready) throw new AppError({ code: "installer_release_unavailable", message: "安装服务准备中，请稍后重试", httpStatus: 503 });
     if (rateLimiter) await rateLimiter.consume({ scope: "installation_token", subject: String(session.user.id), limit: 3, windowMs: 60_000 });
     const issued = await installationTokenService.create({ userId: session.user.id, sessionId: session.sessionId, apiKeyId: request.params.id });
     reply.header("Cache-Control", "no-store");

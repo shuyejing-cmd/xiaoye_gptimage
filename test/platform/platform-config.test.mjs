@@ -31,7 +31,10 @@ test("installation tokens use an independent pepper and versioned public origin"
   assert.equal(config.installationTokenPepper, "installations");
   assert.equal(config.publicOrigin, "https://xiaoyeai.cn");
   assert.equal(config.installerVersion, "1.2.0");
+  assert.equal(config.releaseRepository, null);
+  assert.equal(loadPlatformConfig({ ...baseEnv, WORKBUDDY_RELEASE_REPOSITORY: "owner/repository" }).releaseRepository, "owner/repository");
   assert.throws(() => loadPlatformConfig({ ...baseEnv, INSTALLATION_TOKEN_PEPPER: "" }), (error) => error.code === "missing_config");
   assert.throws(() => loadPlatformConfig({ ...baseEnv, PUBLIC_ORIGIN: "http://xiaoyeai.cn" }), (error) => error.code === "invalid_config");
   assert.throws(() => loadPlatformConfig({ ...baseEnv, WORKBUDDY_INSTALLER_VERSION: "latest" }), (error) => error.code === "invalid_config");
+  assert.throws(() => loadPlatformConfig({ ...baseEnv, WORKBUDDY_RELEASE_REPOSITORY: "not a repository" }), (error) => error.code === "invalid_config");
 });

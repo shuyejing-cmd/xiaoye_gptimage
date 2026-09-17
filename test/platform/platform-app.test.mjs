@@ -11,7 +11,7 @@ import { createInstallationTokenService } from "../../src/platform/installations
 import { createRateLimiter } from "../../src/platform/http/rate-limiter.mjs";
 import { createPlatformApp } from "../../src/platform/http/platform-app.mjs";
 
-async function setup({ publicRegistrationEnabled = true, cookieSecure = true } = {}) {
+async function setup({ publicRegistrationEnabled = true, cookieSecure = true, releaseService = { getStatus: async () => ({ ready: true, version: "1.2.0", manifest_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp-1.2.0.json" }) } } = {}) {
   const memory = newDb({ autoCreateForeignKeyIndices: true, noAstCoverageCheck: true });
   const { Pool } = memory.adapters.createPg();
   const pool = new Pool();
@@ -26,7 +26,7 @@ async function setup({ publicRegistrationEnabled = true, cookieSecure = true } =
   const walletService = createWalletService({ pool });
   const generationJobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: Buffer.alloc(32, 4) }), requestIdFactory: () => `api-${++requestId}` });
   const installationTokenService = createInstallationTokenService({ pool, pepper: "installation-tokens", apiKeyService, randomBytes: () => Buffer.alloc(24, tokenSeed++) });
-  const app = createPlatformApp({ pool, authService, apiKeyService, installationTokenService, walletService, generationJobs, rateLimiter: createRateLimiter({ pool }), temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) }, publicRegistrationEnabled, cookieSecure, publicOrigin: "https://xiaoyeai.cn", installerVersion: "1.1.0", readyCheck: async () => true });
+  const app = createPlatformApp({ pool, authService, apiKeyService, installationTokenService, releaseService, walletService, generationJobs, rateLimiter: createRateLimiter({ pool }), temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) }, publicRegistrationEnabled, cookieSecure, publicOrigin: "https://xiaoyeai.cn", installerVersion: "1.2.0", readyCheck: async () => true });
   return { pool, app, sent };
 }
 
@@ -166,6 +166,22 @@ test("an owner can issue a prompt and exchange its one-time installation token",
   const repeated = await app.inject({ method: "POST", url: "/v1/installations/exchange", payload: { installation_token: token } });
   assert.equal(repeated.statusCode, 409);
   assert.equal(repeated.json().error.code, "installation_token_used");
+  await app.close();
+  await pool.end();
+});
+
+test("release status is visible to the user and unavailable releases block token issuance", async () => {
+  const releaseService = { getStatus: async () => ({ ready: false, version: "1.2.0", manifest_url: null, message: "安装服务准备中" }) };
+  const { pool, app, sent } = await setup({ releaseService });
+  const owner = await login(app, sent, "release-owner@example.com", "release-browser");
+  const status = await app.inject({ method: "GET", url: "/api/install-release/status", headers: { cookie: owner.cookie } });
+  assert.equal(status.statusCode, 200);
+  assert.deepEqual(status.json(), await releaseService.getStatus());
+  const created = await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name: "Installer" } });
+  const issued = await app.inject({ method: "POST", url: `/api/api-keys/${created.json().id}/installation-token`, headers: { cookie: owner.cookie } });
+  assert.equal(issued.statusCode, 503);
+  assert.equal(issued.json().error.code, "installer_release_unavailable");
+  assert.equal((await pool.query("select count(*)::int as count from installation_tokens")).rows[0].count, 0);
   await app.close();
   await pool.end();
 });
