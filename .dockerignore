@@ -1,0 +1,15 @@
+.git
+.worktrees
+.env
+.env.*
+!.env.example
+node_modules
+web/node_modules
+web/dist
+coverage
+data
+*.tar.gz
+*.zip
+docs
+test
+installer
