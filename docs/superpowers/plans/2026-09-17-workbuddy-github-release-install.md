@@ -12,46 +12,53 @@
 
 ### Task 1: Version and token contract
 
-- [ ] Add failing tests for a 30-minute installation-token lifetime and synchronized 1.2.0 artifacts.
-- [ ] Implement the lifetime and version changes.
-- [ ] Run focused tests and commit.
+- [x] Add failing tests for a 30-minute installation-token lifetime and synchronized 1.2.0 artifacts.
+- [x] Implement the lifetime and version changes.
+- [x] Run focused tests and commit.
 
 ### Task 2: GitHub Release verification
 
-- [ ] Add failing tests for repository validation, release URLs, manifest parsing, asset size, SHA-256 verification, five-minute caching, and single-flight checks.
-- [ ] Implement the release verifier and `GET /api/install-release/status`.
-- [ ] Gate installation-token issuance when the release is unavailable.
-- [ ] Run focused tests and commit.
+- [x] Add failing tests for repository validation, release URLs, manifest parsing, asset size, SHA-256 verification, five-minute caching, and single-flight checks.
+- [x] Implement the release verifier and `GET /api/install-release/status`.
+- [x] Gate installation-token issuance when the release is unavailable.
+- [x] Run focused tests and commit.
 
 ### Task 3: Installation prompt hardening
 
-- [ ] Add failing tests for GitHub URLs, non-empty bootstrap checks, explicit PowerShell invocation, exact `installed` success, and unconditional cleanup.
-- [ ] Implement the hardened prompt without exposing long-lived Keys.
-- [ ] Run focused tests and commit.
+- [x] Add failing tests for GitHub URLs, non-empty bootstrap checks, explicit PowerShell invocation, exact `installed` success, and unconditional cleanup.
+- [x] Implement the hardened prompt without exposing long-lived Keys.
+- [x] Run focused tests and commit.
 
 ### Task 4: Legacy image-bridge migration
 
-- [ ] Add failing tests for exact legacy fingerprints, successful removal, unknown-entry preservation, and rollback.
-- [ ] Implement preflight verification and atomic final configuration.
-- [ ] Run installer tests and commit.
+- [x] Add failing tests for exact legacy fingerprints, successful removal, unknown-entry preservation, and rollback.
+- [x] Implement preflight verification and atomic final configuration.
+- [x] Run installer tests and commit.
 
 ### Task 5: Unsigned beta release pipeline
 
-- [ ] Add failing release-contract tests for three complete non-empty assets and all-or-nothing publication.
-- [ ] Update the 1.2.0 unsigned beta build and manifest flow.
-- [ ] Add a `v*` GitHub Actions release workflow using Node 22 and Inno Setup.
-- [ ] Run release tests and commit.
+- [x] Add failing release-contract tests for three complete non-empty assets and all-or-nothing publication.
+- [x] Update the 1.2.0 unsigned beta build and manifest flow.
+- [x] Add a `v1.2.0` GitHub Actions release workflow using Node 22 and Inno Setup.
+- [x] Run release tests and commit.
 
 ### Task 6: Release-aware website
 
-- [ ] Add failing web-state tests.
-- [ ] Show release readiness, a 30-minute one-use notice, GitHub beta warning, and the manual installer URL.
-- [ ] Disable prompt issuance while the release is unavailable.
-- [ ] Build and visually verify desktop/mobile states, then commit.
+- [x] Add failing web-state tests.
+- [x] Show release readiness, a 30-minute one-use notice, GitHub beta warning, and the manual installer URL.
+- [x] Disable prompt issuance while the release is unavailable.
+- [x] Build and visually verify desktop/mobile states, then commit.
 
 ### Task 7: Verification and handoff
 
-- [ ] Run `npm test`, `npm run web:build`, and `git diff --check`.
-- [ ] Update docs and production checklist for GitHub distribution and the two remaining manual tasks.
-- [ ] Record the public repository and clean-Windows validation as explicit incomplete gates.
-- [ ] Commit the completed implementation plan and preserve the feature branch.
+- [x] Run `npm test`, `npm run web:build`, and `git diff --check`.
+- [x] Update docs and production checklist for GitHub distribution and the two remaining manual tasks.
+- [x] Record the public repository and clean-Windows validation as explicit incomplete gates.
+- [x] Commit the completed implementation plan and preserve the feature branch.
+
+### Remaining manual gates
+
+- [ ] Create the public GitHub repository, then set `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`, add the remote, and push the branch plus `v1.2.0` tag.
+- [ ] After GitHub Actions publishes the complete Release, run the prompt-to-`get_balance` flow once in a clean Windows environment without Node.js.
+
+Local installer compilation was not run because Inno Setup is not installed on this development machine. The GitHub Actions Windows runner installs it before building; the release remains unavailable until that workflow and the two gates above succeed.

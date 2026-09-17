@@ -32,15 +32,19 @@
 ## 网站与安装器
 
 - [ ] 保存并复核未登录首屏、普通用户主界面和管理员主界面的桌面与 390px 移动截图。
-- [ ] 从真实用户页面完成一次“复制安装提示词 → WorkBuddy 请求命令权限 → 自动安装 → 开启 `xiaoye-image`”全流程。
+- [ ] 公开 GitHub 仓库已经创建，生产环境设置了 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。
+- [ ] `v1.2.0` GitHub Actions 成功；Release 中 bootstrap、manifest 和 EXE 三个文件存在、非空且 EXE SHA-256 与 manifest 一致。
+- [ ] 在一套无 Node.js 的干净 Windows 环境，从真实用户页面完成“复制安装提示词 → WorkBuddy 请求一次命令权限 → 自动安装 → 开启 `xiaoye-image` → `get_balance` 成功”全流程。
 - [ ] 已使用和已过期的安装码均不能再次兑换，并向用户显示可操作的中文下一步。
 - [ ] 禁用 WorkBuddy 本机命令执行能力时，不尝试猜测路径，正确展示手动安装器下载入口。
-- [ ] 在无 Node.js 的 Windows 10/11 x64 用户中安装已签名安装包并成功生成。
-- [ ] 在 Windows 10 和 Windows 11 的全新本地用户中分别验证默认路径、自定义安装目录和显式选择的 `mcp.json`。
 - [ ] 在已有多个 MCP 的配置中安装、修复和卸载，其他 MCP 始终保留。
 - [ ] 在损坏配置场景验证备份和恢复路径，记录无法恢复的原始损坏内容。
-- [ ] 1.1.0 安装器和 bootstrap 的 Authenticode 状态均为 `Valid`，签名主题与 bootstrap 固定发布者完全一致，之后安装包、SHA-256 清单和 bootstrap 才复制到网站目录。
 - [ ] 抽查安装提示词、WorkBuddy 命令参数、安装器输出和服务日志，均不含 `wb_live_` 长期 Key。
+
+首版内测不由以下增强项阻塞：
+
+- [ ] 购买 Windows 代码签名证书，为 EXE 和 bootstrap 增加 Authenticode 签名并验证固定发布者。
+- [ ] 扩展 Windows 10/11、默认/自定义配置路径、自定义安装目录和异常环境测试矩阵。
 
 ## 安全与观察期
 

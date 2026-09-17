@@ -80,9 +80,9 @@ curl -fsS https://your-domain.example/readyz
 2. 点击“复制安装提示词”，把整段内容发送给 WorkBuddy；提示词只含 10 分钟有效、只能使用一次的安装码，不含长期 Key。
 3. WorkBuddy 说明操作后，允许一次本机命令执行。安装成功后开启 `xiaoye-image`；列表没有刷新时重启 WorkBuddy。
 
-自动流程会下载固定版本的官方 bootstrap 和安装器，校验 HTTPS、SHA-256、有效 Authenticode 签名及精确发布者，然后备份 WorkBuddy 配置、只合并 `xiaoye-image` 并调用 `/v1/account/balance` 自检。安装码通过当前用户临时文件传递，不进入 URL；长期 Key 不进入聊天、命令行或安装日志。
+自动流程会从公开 GitHub Release 下载固定版本的 bootstrap 和安装器，校验 HTTPS、文件大小和 SHA-256；带签名的后续版本还会校验 Authenticode 与精确发布者。安装器备份 WorkBuddy 配置、合并 `xiaoye-image` 并调用 `/v1/account/balance` 自检。只有新版自检成功后，才会移除指向 `xiaoyeai.cn` 的自有旧版 `image-bridge`；失败会恢复原配置。安装码通过当前用户临时文件传递，不进入 URL；长期 Key 不进入聊天、命令行或安装日志。
 
-WorkBuddy 不能执行本机命令时，使用网站的“下载安装器”手动安装。仍无法安装时，可在“MCP Key”页面复制完整 JSON 配置作为最后兜底；只有手动兜底需要直接处理 Key，不要把 Key 发到聊天或截图中。
+WorkBuddy 不能执行本机命令时，使用网站显示的固定版本 GitHub Release 地址手动安装。个人 Key 只在登录后的“MCP Key”页面显示，不要把 Key 发到聊天或截图中。
 
 在 WorkBuddy 调用 `generate_image`；任务超过 90 秒时用 `get_generation` 查询，用 `get_balance` 查看可用与冻结额度。
 
@@ -108,24 +108,28 @@ WorkBuddy 不能执行本机命令时，使用网站的“下载安装器”手�
 
 ## 安装器发布
 
-生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`，并发布与 `WORKBUDDY_INSTALLER_VERSION` 一致的安装器。当前协议版本为 1.1.0，固定地址和版本地址分别为：
+生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`、`WORKBUDDY_INSTALLER_VERSION=1.2.0` 和公开仓库 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。安装文件只通过该仓库的固定版本 GitHub Release 分发：
 
-- `https://xiaoyeai.cn/install/workbuddy-image-mcp.ps1`
-- `https://xiaoyeai.cn/install/workbuddy-image-mcp-1.1.0.json`
-- `https://xiaoyeai.cn/install/WorkBuddy-Image-MCP-Setup-1.1.0.exe`
+- `workbuddy-image-mcp.ps1`
+- `workbuddy-image-mcp-1.2.0.json`
+- `WorkBuddy-Image-MCP-Setup-1.2.0.exe`
 
-构建机需安装 Inno Setup 6。未配置证书时只生成本地测试包，不会写入网站目录；设置证书 SHA-1 后，脚本按“构建 → 安装器和 bootstrap 的 Authenticode 签名 → 验证签名和精确发布者 → SHA-256 → 清单 → 发布”的顺序执行。bootstrap 当前固定要求发布者主题为 `CN=Xiaoye AI`；正式购买证书后的主题必须与其完全一致，否则应在发布前审查并同时更新 bootstrap 与构建脚本中的固定值。
+推送 `v1.2.0` 标签后，`.github/workflows/release.yml` 使用 Node.js 22 和 Inno Setup 构建、测试并先创建草稿 Release；三个文件完整、非空且清单哈希一致后才公开。任何上传或核对失败都会删除草稿。未签名 1.2.0 是公开内测版，Windows 可能显示“未知发布者”；正式签名不阻塞首版。
+
+后端每 5 分钟检查一次 Release，校验 bootstrap 大于 1 KiB、EXE 大于 10 MiB、版本和 SHA-256 一致。检查未通过时，`GET /api/install-release/status` 返回未就绪，网站禁用提示词与下载操作，也不会签发新的 30 分钟一次性安装码。
+
+本地构建机需安装 Inno Setup 6，并显式提供公开仓库：
 
 ```powershell
-$env:CODE_SIGN_CERT_SHA1 = "certificate-thumbprint"
+$env:WORKBUDDY_RELEASE_REPOSITORY = "owner/repository"
 npm run installer:build
 ```
 
-安装后开始菜单提供“检测连接”和“修复配置”；卸载时只删除 `xiaoye-image` 条目。公开发布前必须在 Windows 10/11 的干净用户、无 Node.js、已有多个 MCP、默认/自定义配置路径和自定义安装目录中验证。还必须分别验证 WorkBuddy 允许命令执行时自动完成，以及禁止命令执行时正确展示手动下载兜底。
+如配置 `$env:CODE_SIGN_CERT_SHA1`，构建脚本会额外签名并验证发布者 `CN=Xiaoye AI`。安装后开始菜单提供“检测连接”和“修复配置”；卸载时只删除 `xiaoye-image` 条目。内测开放前只保留两个安装阻断条件：GitHub Release 三件套完整且哈希一致；一套无 Node.js 的干净 Windows 环境完成“复制提示词 → 授权 → 安装 → 开启 → `get_balance`”全流程。
 
 ## 主要接口
 
-- 网站：`/api/auth/*`、`/api/wallet`、`/api/ledger`、`/api/recharge-*`、`/api/api-keys`
+- 网站：`/api/auth/*`、`/api/wallet`、`/api/ledger`、`/api/recharge-*`、`/api/api-keys`、`/api/install-release/status`
 - 管理：`/api/admin/recharge-*`、`/api/admin/payment-channels`、`/api/admin/users`、`/api/admin/manual-reviews`
 - WorkBuddy：`POST /v1/generations`、`GET /v1/generations/:request_id`、`GET /v1/account/balance`
 - 兼容：`POST /v1/bridge/generations` 和管理员旧 `/mcp`
