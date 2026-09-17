@@ -32,8 +32,8 @@
 ## 网站与安装器
 
 - [ ] 保存并复核未登录首屏、普通用户主界面和管理员主界面的桌面与 390px 移动截图。
-- [ ] 公开 GitHub 仓库已经创建，生产环境设置了 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。
-- [ ] `v1.2.0` GitHub Actions 成功；Release 中 bootstrap、manifest 和 EXE 三个文件存在、非空且 EXE SHA-256 与 manifest 一致。
+- [ ] 公开 GitHub 仓库已经创建，生产环境设置了 `WORKBUDDY_RELEASE_REPOSITORY=shuyejing-cmd/xiaoye_gptimage`。
+- [x] `v1.2.0` GitHub Actions 成功；Release 中 bootstrap、manifest 和 EXE 三个文件存在、非空且 EXE SHA-256 与 manifest 一致。证据：[Actions run 35177824430](https://github.com/shuyejing-cmd/xiaoye_gptimage/actions/runs/35177824430) 和 [v1.2.0 Release](https://github.com/shuyejing-cmd/xiaoye_gptimage/releases/tag/v1.2.0)。
 - [ ] 在一套无 Node.js 的干净 Windows 环境，从真实用户页面完成“复制安装提示词 → WorkBuddy 请求一次命令权限 → 自动安装 → 开启 `xiaoye-image` → `get_balance` 成功”全流程。
 - [ ] 已使用和已过期的安装码均不能再次兑换，并向用户显示可操作的中文下一步。
 - [ ] 禁用 WorkBuddy 本机命令执行能力时，不尝试猜测路径，正确展示手动安装器下载入口。
