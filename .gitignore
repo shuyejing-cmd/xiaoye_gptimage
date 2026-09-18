@@ -12,3 +12,4 @@ outputs/
 work/
 .runtime/
 .worktrees/
+.superpowers/
