@@ -47,10 +47,14 @@ export async function verifyPrivateTokenFile(tokenFile) {
 
 export async function restrictPrivateFile(path) {
   if (process.platform !== "win32") return;
-  const username = process.env.USERNAME;
-  if (!username) throw new InstallationClientError("windows_user_unavailable");
   try {
-    await execFileAsync("icacls.exe", [path, "/inheritance:r", "/grant:r", `${username}:(R,W)`], { windowsHide: true });
+    const { stdout } = await execFileAsync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-Command",
+      "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value"
+    ], { windowsHide: true });
+    const sid = stdout.trim();
+    if (!/^S-\d(?:-\d+)+$/.test(sid)) throw new Error("invalid Windows SID");
+    await execFileAsync("icacls.exe", [path, "/inheritance:r", "/grant:r", `*${sid}:(R,W)`, "*S-1-5-18:(F)", "*S-1-5-32-544:(F)"], { windowsHide: true });
   } catch {
     throw new InstallationClientError("private_file_acl_failed");
   }

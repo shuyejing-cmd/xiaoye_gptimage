@@ -2,12 +2,28 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $StageDir = Join-Path $PSScriptRoot 'stage'
 $OutputDir = Join-Path $PSScriptRoot 'output'
-$Version = '1.2.0'
+$Version = '1.2.1'
 $ExpectedPublisher = 'CN=Xiaoye AI'
 $Repository = [string]$env:WORKBUDDY_RELEASE_REPOSITORY
+$PrimaryBaseUrl = [string]$env:WORKBUDDY_RELEASE_BASE_URL
+
+function Get-Sha256Hex([string]$Path) {
+  $Stream = [System.IO.File]::OpenRead($Path)
+  $Hasher = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([BitConverter]::ToString($Hasher.ComputeHash($Stream))).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $Hasher.Dispose()
+    $Stream.Dispose()
+  }
+}
 
 if (-not $StageDir.StartsWith($PSScriptRoot) -or -not $OutputDir.StartsWith($PSScriptRoot)) { throw 'Installer paths escaped the installer directory.' }
 if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'WORKBUDDY_RELEASE_REPOSITORY must use owner/repository.' }
+$FallbackBaseUrl = "https://github.com/$Repository/releases/download/v$Version"
+if ([string]::IsNullOrWhiteSpace($PrimaryBaseUrl)) { $PrimaryBaseUrl = $FallbackBaseUrl }
+$PrimaryBaseUrl = $PrimaryBaseUrl.TrimEnd('/')
+if ($PrimaryBaseUrl -notmatch '^https://') { throw 'WORKBUDDY_RELEASE_BASE_URL must use HTTPS.' }
 $Iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
 if (-not $Iscc) { throw 'Inno Setup iscc.exe was not found. Install Inno Setup 6 and retry.' }
 
@@ -20,7 +36,7 @@ Copy-Item -LiteralPath (Join-Path $ProjectRoot 'src') -Destination (Join-Path $S
 Copy-Item -LiteralPath (Join-Path $ProjectRoot 'node_modules') -Destination (Join-Path $StageDir 'app\node_modules') -Recurse
 Copy-Item -LiteralPath (Join-Path $ProjectRoot 'package.json') -Destination (Join-Path $StageDir 'app\package.json')
 
-& $Iscc "/DStageDir=$StageDir" (Join-Path $PSScriptRoot 'workbuddy-image-mcp.iss')
+& $Iscc "/Qp" "/DStageDir=$StageDir" (Join-Path $PSScriptRoot 'workbuddy-image-mcp.iss')
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup build failed with exit code $LASTEXITCODE." }
 $UnversionedInstallerPath = Join-Path $OutputDir 'WorkBuddy-Image-MCP-Setup.exe'
 if (-not (Test-Path -LiteralPath $UnversionedInstallerPath)) { throw 'Inno Setup did not create the expected installer.' }
@@ -53,18 +69,18 @@ $VersionedInstallerPath = Join-Path $OutputDir $VersionedInstallerName
 Move-Item -LiteralPath $UnversionedInstallerPath -Destination $VersionedInstallerPath
 $ManifestName = "workbuddy-image-mcp-$Version.json"
 $ManifestPath = Join-Path $OutputDir $ManifestName
-$Sha256 = (Get-FileHash -LiteralPath $VersionedInstallerPath -Algorithm SHA256).Hash.ToLowerInvariant()
-$ReleaseBaseUrl = "https://github.com/$Repository/releases/download/v$Version"
+$Sha256 = Get-Sha256Hex $VersionedInstallerPath
 & $NodeExe (Join-Path $PSScriptRoot 'release-manifest.mjs') `
   "--version=$Version" `
   "--sha256=$Sha256" `
   "--signed=$Signed" `
   "--publisher=$ExpectedPublisher" `
-  "--installer-url=$ReleaseBaseUrl/$VersionedInstallerName" `
+  "--installer-url=$PrimaryBaseUrl/$VersionedInstallerName" `
+  "--fallback-installer-url=$FallbackBaseUrl/$VersionedInstallerName" `
   "--output=$ManifestPath"
 if ($LASTEXITCODE -ne 0) { throw "Release manifest generation failed with exit code $LASTEXITCODE." }
 
 if ((Get-Item -LiteralPath $BootstrapPath).Length -lt 1KB) { throw 'Release bootstrap is unexpectedly small.' }
 if ((Get-Item -LiteralPath $ManifestPath).Length -le 0) { throw 'Release manifest is empty.' }
 if ((Get-Item -LiteralPath $VersionedInstallerPath).Length -lt 10MB) { throw 'Release installer is unexpectedly small.' }
-Write-Host "GitHub Release assets created in $OutputDir (signed=$Signed)"
+Write-Host "Release assets created in $OutputDir (signed=$Signed)"

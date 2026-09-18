@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ExpectedPublisher = 'CN=Xiaoye AI'
-$ExpectedVersion = '1.2.0'
+$ExpectedVersion = '1.2.1'
 $ManifestPath = $null
 $InstallerPath = $null
 $ResultPath = $null
@@ -24,6 +24,38 @@ function Get-TemporaryPath([string]$Extension) {
   return Join-Path $TempRoot ("workbuddy-image-{0}{1}" -f [guid]::NewGuid(), $Extension)
 }
 
+function Get-Sha256Hex([string]$Path) {
+  $Stream = [System.IO.File]::OpenRead($Path)
+  $Hasher = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([BitConverter]::ToString($Hasher.ComputeHash($Stream))).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $Hasher.Dispose()
+    $Stream.Dispose()
+  }
+}
+
+function Invoke-DownloadWithRetry {
+  param(
+    [string[]]$Urls,
+    [string]$Destination,
+    [int]$MaxAttempts = 3
+  )
+  foreach ($Url in $Urls) {
+    $DownloadUri = Assert-HttpsUrl $Url 'download URL'
+    for ($Attempt = 1; $Attempt -le $MaxAttempts; $Attempt++) {
+      try {
+        Remove-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
+        Invoke-WebRequest -Uri $DownloadUri -OutFile $Destination -UseBasicParsing -TimeoutSec 120
+        if ((Get-Item -LiteralPath $Destination).Length -gt 0) { return $DownloadUri }
+      } catch {
+        if ($Attempt -lt $MaxAttempts) { Start-Sleep -Seconds ([Math]::Min(2 * $Attempt, 5)) }
+      }
+    }
+  }
+  throw 'installer_download_failed'
+}
+
 function Resolve-PrivateTokenFile([string]$Value) {
   $Resolved = (Resolve-Path -LiteralPath $Value).Path
   $FullPath = [IO.Path]::GetFullPath($Resolved)
@@ -31,8 +63,11 @@ function Resolve-PrivateTokenFile([string]$Value) {
       (Get-Item -LiteralPath $FullPath).PSIsContainer) {
     throw 'installation_token_file_insecure'
   }
-  $Acl = [System.IO.File]::GetAccessControl($FullPath)
+  $script:CleanupTokenFile = $FullPath
   $Me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+  & icacls.exe $FullPath /inheritance:r /grant:r "*$($Me.Value):(R,W)" '*S-1-5-18:(F)' '*S-1-5-32-544:(F)' | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'installation_token_file_insecure' }
+  $Acl = [System.IO.File]::GetAccessControl($FullPath)
   $Rules = $Acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
   $Unsafe = $Rules | Where-Object {
     $_.AccessControlType -eq 'Allow' -and
@@ -49,7 +84,7 @@ try {
   $CleanupTokenFile = $FullTokenPath
 
   $ManifestPath = Get-TemporaryPath '.json'
-  Invoke-WebRequest -Uri $ManifestUri -OutFile $ManifestPath -UseBasicParsing
+  Invoke-DownloadWithRetry -Urls @($ManifestUri.AbsoluteUri) -Destination $ManifestPath | Out-Null
   if ((Get-Item -LiteralPath $ManifestPath).Length -le 0) { throw 'installer_verification_failed: empty manifest' }
   $Manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
   if ($Manifest.version -ne $ExpectedVersion -or
@@ -58,12 +93,15 @@ try {
       $Manifest.signed.GetType() -ne [bool]) {
     throw 'installer_verification_failed: invalid manifest'
   }
-  $InstallerUri = Assert-HttpsUrl $Manifest.installer_url 'installer URL'
+  $InstallerUrls = @([string]$Manifest.installer_url)
+  if ($Manifest.fallback_installer_urls) {
+    $InstallerUrls += @($Manifest.fallback_installer_urls | ForEach-Object { [string]$_ })
+  }
 
   $InstallerPath = Get-TemporaryPath '.exe'
-  Invoke-WebRequest -Uri $InstallerUri -OutFile $InstallerPath -UseBasicParsing
+  Invoke-DownloadWithRetry -Urls $InstallerUrls -Destination $InstallerPath | Out-Null
   if ((Get-Item -LiteralPath $InstallerPath).Length -lt 10MB) { throw 'installer_verification_failed: installer too small' }
-  $ActualHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  $ActualHash = Get-Sha256Hex $InstallerPath
   if ($ActualHash -cne ([string]$Manifest.sha256).ToLowerInvariant()) {
     throw 'installer_verification_failed: SHA-256 mismatch'
   }

@@ -6,7 +6,7 @@
 
 ## 使用方式
 
-用户应登录小叶图片 MCP 网站创建个人 Key，然后复制网站生成的 30 分钟一次性安装提示词给 WorkBuddy。提示词会从本仓库固定版本 Release 下载并校验安装器。
+用户应登录小叶图片 MCP 网站创建个人 Key，然后复制网站生成的 30 分钟一次性安装提示词给 WorkBuddy。提示词优先从腾讯云 COS 下载固定版本安装文件，失败时自动使用本仓库同版本 Release，并始终校验安装器 SHA-256。
 
 安装完成后，在 WorkBuddy 中开启 `xiaoye-image`，并调用 `get_balance` 检查连接。
 
@@ -36,10 +36,10 @@ bridge 读取以下环境变量：
 
 ## Release
 
-推送 `v1.2.0` 标签会触发 GitHub Actions，在 Windows runner 上测试并生成：
+推送 `v1.2.1` 标签会触发 GitHub Actions，在 Windows runner 上测试并生成：
 
 - `workbuddy-image-mcp.ps1`
-- `workbuddy-image-mcp-1.2.0.json`
-- `WorkBuddy-Image-MCP-Setup-1.2.0.exe`
+- `workbuddy-image-mcp-1.2.1.json`
+- `WorkBuddy-Image-MCP-Setup-1.2.1.exe`
 
-当前 1.2.0 为未签名公开内测版，Windows 可能显示“未知发布者”。安装前请确认下载地址属于本仓库 Release。
+当前 1.2.1 为未签名公开内测版，Windows 可能显示“未知发布者”。正式文件只由 GitHub Actions 构建一次，并将同一批文件原样镜像到腾讯云 COS。
