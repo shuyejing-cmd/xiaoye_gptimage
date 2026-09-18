@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatInstallExpiry, installationPromptStatus, installReleaseView } from "./mcp-config.js";
 import { requestHeaders } from "./http-options.js";
 import { createKeyWithPrompt, isPromptExpired, resolveSelectedKeyId } from "./key-page-flow.js";
@@ -92,7 +92,20 @@ function Overview({ me }) {
 
 function Keys() {
   const [keys, setKeys] = useState([]), [selectedId, setSelectedId] = useState(""), [error, setError] = useState(""), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [issuing, setIssuing] = useState(""), [copyState, setCopyState] = useState({}), [prompts, setPrompts] = useState({}), [clock, setClock] = useState(Date.now());
+  const selectorRef = useRef(null);
+  const [tabThumb, setTabThumb] = useState(null);
   const release = useInstallRelease();
+  useLayoutEffect(() => {
+    const list = selectorRef.current;
+    const active = list?.querySelector("button.selected");
+    if (!list || !active) { setTabThumb(null); return undefined; }
+    const update = () => setTabThumb({ top: active.offsetTop, height: active.offsetHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(list);
+    observer.observe(active);
+    return () => observer.disconnect();
+  }, [keys, selectedId]);
   const load = useCallback(() => api("/api/api-keys").then(x => setKeys(x.keys)).finally(()=>setLoading(false)), []);
   useEffect(() => { load().catch(e => setError(e.message)); }, [load]);
   useEffect(() => { setSelectedId(current => resolveSelectedKeyId(keys, current)); }, [keys]);
@@ -170,14 +183,14 @@ function Keys() {
         {promptState?.loading && <Loading>正在生成安装提示词…</Loading>}
         {promptState?.error && !promptState.loading && <div className="prompt-state error" role="alert"><p>提示词生成失败：{promptState.error}</p><button disabled={!release.ready} onClick={() => issuePrompt(key.id)}>重试</button></div>}
         {expired && !promptState.loading && <div className="prompt-state"><p>这段安装提示词已过期，请重新生成。</p><button className="primary" disabled={!release.ready || issuing === key.id} onClick={() => issuePrompt(key.id)}>重新生成</button></div>}
-        {promptState?.prompt && !expired && <div id={panelId} className="prompt-body" hidden={!promptState.expanded}><div className="prompt-actions"><button className="primary" disabled={!release.ready} onClick={() => copy(key.id, "prompt", promptState.prompt)}>复制提示词</button><button disabled={!release.ready || issuing === key.id} onClick={() => issuePrompt(key.id)}>{issuing === key.id ? "正在生成…" : "重新生成"}</button><span aria-live="polite">{copyState.id === key.id && copyState.type === "prompt" ? copyState.message : ""}</span></div><pre tabIndex="0">{promptState.prompt}</pre><small>30 分钟内有效且只能使用一次 · {formatInstallExpiry(promptState.expiresAt)} 过期</small></div>}
+        {promptState?.prompt && !expired && <div id={panelId} className="prompt-body" hidden={!promptState.expanded}><div className="prompt-actions"><button className="primary" disabled={!release.ready} onClick={() => copy(key.id, "prompt", promptState.prompt)}>复制提示词</button><button disabled={!release.ready || issuing === key.id} onClick={() => issuePrompt(key.id)}>{issuing === key.id ? "正在生成…" : "重新生成"}</button><span aria-live="polite">{copyState.id === key.id && copyState.type === "prompt" ? copyState.message : ""}</span></div><div className="code-block"><div className="code-block-bar"><span className="code-block-dots" aria-hidden="true"><i/><i/><i/></span><span className="code-block-name">workbuddy-install.txt</span><small>30 分钟内有效且只能使用一次 · {formatInstallExpiry(promptState.expiresAt)} 过期</small></div><pre tabIndex="0">{promptState.prompt}</pre></div></div>}
       </section>}
     </>;
   };
   return <section className="page keys-page"><header className="page-head key-page-head"><div><h1>个人 MCP Key</h1><p>选择一个 Key，复制提示词给 WorkBuddy，即可完成安装。</p></div><div className="toolbar"><span>{keys.filter(x=>x.status==="active").length} / 3 个有效</span><button className="primary" onClick={create} disabled={busy}>{busy ? "正在处理…" : "创建新 Key"}</button></div></header>
     <div className={`release-strip release-strip-compact ${release.ready ? "ready" : "pending"}`} role="status"><div><b>{release.label}</b><p>{release.ready ? "提示词 30 分钟有效且只能使用一次。" : "安装文件通过校验后即可生成提示词。"}</p></div>{release.ready && release.installerUrl ? <a href={release.installerUrl} target="_blank" rel="noreferrer">手动安装</a> : <button className="text-button" onClick={release.reload}>重新检查</button>}</div>
     {error && <p className="error" role="alert">{error}</p>}
-    {loading ? <Loading/> : keys.length ? <div className="key-workspace glass-panel"><aside className="key-selector" aria-label="个人 Key 列表">{keys.map(key => <button key={key.id} className={key.id === selectedId ? "selected" : ""} aria-pressed={key.id === selectedId} onClick={() => setSelectedId(key.id)}><span><b>{key.name}</b><small>{key.lastUsedAt ? `最近使用 ${new Date(key.lastUsedAt).toLocaleDateString("zh-CN")}` : "尚未使用"}</small></span><Status value={key.status}/></button>)}</aside><section className="key-detail" aria-live="polite">{selectedKey ? renderKeyDetail(selectedKey) : <Empty>请选择一个 Key。</Empty>}</section></div> : <Empty>还没有 Key。创建后会自动显示可复制的 WorkBuddy 安装提示词。</Empty>}
+    {loading ? <Loading/> : keys.length ? <div className="key-workspace glass-panel"><aside ref={selectorRef} className={`key-selector${tabThumb ? " has-thumb" : ""}`} aria-label="个人 Key 列表"><span className="key-tab-thumb" aria-hidden="true" style={tabThumb ? { transform: `translateY(${tabThumb.top}px)`, height: `${tabThumb.height}px` } : undefined}/>{keys.map(key => <button key={key.id} className={key.id === selectedId ? "key-tab selected" : "key-tab"} aria-pressed={key.id === selectedId} onClick={() => setSelectedId(key.id)}><span><b>{key.name}</b><small>{key.lastUsedAt ? `最近使用 ${new Date(key.lastUsedAt).toLocaleDateString("zh-CN")}` : "尚未使用"}</small></span><Status value={key.status}/></button>)}</aside><section className="key-detail" aria-live="polite">{selectedKey ? renderKeyDetail(selectedKey) : <Empty>请选择一个 Key。</Empty>}</section></div> : <Empty>还没有 Key。创建后会自动显示可复制的 WorkBuddy 安装提示词。</Empty>}
   </section>;
 }
 
@@ -231,9 +244,9 @@ export default function App() {
   useEffect(()=>{refresh()},[refresh]);
   useEffect(()=>{if(me)mainRef.current?.focus()},[page,me]);
   if (loading) return <div className="boot">正在核对账户…</div>;
-  if (!me) return <Login onLogin={result=>setMe(result)}/>;
+  if (!me) return <Login onLogin={result => { setPage("overview"); setMe(result); }}/>;
   const logout = async () => { await api("/api/auth/logout", { method: "POST" }); setMe(null); };
   const items = [["overview","overview","概览"],["recharge","recharge","充值"],["keys","key","MCP Key"],["install","install","安装向导"],...(me.user.role==="admin"?[["admin","admin","管理后台"]]:[])];
   const pages={overview:<Overview me={me}/>,recharge:<Recharge/>,keys:<Keys/>,install:<Install/>,admin:<Admin/>};
-  return <><a className="skip-link" href="#main-content">跳到主要内容</a><div className={`app-shell ${page === "admin" ? "admin-surface" : "user-surface"}`}><aside><button className="wordmark" onClick={()=>setPage("overview")}><span>W/B</span><b>WorkBuddy<br/>图片 MCP</b></button><nav aria-label="账户功能">{items.map(([id,icon,label])=><button key={id} className={page===id?"active":""} aria-current={page===id?"page":undefined} onClick={()=>setPage(id)}><Icon name={icon}/>{label}</button>)}</nav><div className="account">{page !== "admin" && <img src={profileAvatar} alt="个人头像"/>}<div><span>{me.user.email}</span><button onClick={logout}>退出登录</button></div></div></aside><main id="main-content" className="content" ref={mainRef} tabIndex="-1"><div className="top-register"><span>{new Date().toLocaleDateString("zh-CN")}</span><span>ACCOUNT / {String(me.user.id).padStart(6,"0")}</span></div>{pages[page]}</main></div></>;
+  return <><a className="skip-link" href="#main-content">跳到主要内容</a><div className={`app-shell ${page === "admin" ? "admin-surface" : "user-surface"}`}><aside><button className="wordmark" onClick={()=>setPage("overview")}><span>W/B</span><b>WorkBuddy<br/>图片 MCP</b></button><nav aria-label="账户功能">{items.map(([id,icon,label])=><button key={id} className={page===id?"nav-item active":"nav-item"} aria-current={page===id?"page":undefined} onClick={()=>setPage(id)}><Icon name={icon}/>{label}</button>)}</nav><div className="account">{page !== "admin" && <img src={profileAvatar} alt="个人头像"/>}<div><span>{me.user.email}</span><button onClick={logout}>退出登录</button></div></div></aside><main id="main-content" className="content" ref={mainRef} tabIndex="-1"><div className="top-register"><span>{new Date().toLocaleDateString("zh-CN")}</span><span>ACCOUNT / {String(me.user.id).padStart(6,"0")}</span></div>{pages[page]}</main></div></>;
 }
