@@ -1,0 +1,44 @@
+:root {
+  --meadow: #dff3d4;
+  --glass: rgba(250, 255, 246, .72);
+  --glass-solid: #f4fced;
+  --forest: #1f6848;
+  --glass-ink: #17372b;
+  --glass-muted: #537262;
+  --glass-edge: rgba(255, 255, 255, .78);
+  --glass-rule: rgba(48, 105, 73, .16);
+  --glass-focus: #245f91;
+  --glass-danger: #a33f35;
+  --glass-review: #8b681e;
+  --glass-shadow: 0 22px 60px rgba(31, 104, 72, .14);
+}
+
+.landing,
+.user-surface {
+  color: var(--glass-ink);
+  background: var(--meadow) url("./assets/meadow-background.png") center / cover fixed;
+}
+
+.landing ::selection,
+.user-surface ::selection {
+  color: #0d3524;
+  background: #b9e5aa;
+}
+
+.landing :focus-visible,
+.user-surface :focus-visible {
+  outline: 3px solid var(--glass-focus);
+  outline-offset: 3px;
+}
+
+.glass-panel {
+  border: 1px solid var(--glass-edge);
+  border-radius: 26px;
+  background: var(--glass);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .92), var(--glass-shadow);
+  backdrop-filter: blur(22px) saturate(1.2);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-panel { background: rgba(244, 252, 237, .96); }
+}

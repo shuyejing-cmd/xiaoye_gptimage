@@ -5,6 +5,7 @@ import "@fontsource-variable/jetbrains-mono";
 import "./styles.css";
 import "./mobile.css";
 import "./enhancements.css";
+import "./green-glass.css";
 import App from "./App.jsx";
 
 createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);
