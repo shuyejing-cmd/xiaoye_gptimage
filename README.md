@@ -80,9 +80,9 @@ curl -fsS https://your-domain.example/readyz
 2. 点击“复制安装提示词”，把整段内容发送给 WorkBuddy；提示词只含 10 分钟有效、只能使用一次的安装码，不含长期 Key。
 3. WorkBuddy 说明操作后，允许一次本机命令执行。安装成功后开启 `xiaoye-image`；列表没有刷新时重启 WorkBuddy。
 
-自动流程会从公开 GitHub Release 下载固定版本的 bootstrap 和安装器，校验 HTTPS、文件大小和 SHA-256；带签名的后续版本还会校验 Authenticode 与精确发布者。安装器备份 WorkBuddy 配置、合并 `xiaoye-image` 并调用 `/v1/account/balance` 自检。只有新版自检成功后，才会移除指向 `xiaoyeai.cn` 的自有旧版 `image-bridge`；失败会恢复原配置。安装码通过当前用户临时文件传递，不进入 URL；长期 Key 不进入聊天、命令行或安装日志。
+自动流程优先从腾讯云下载固定版本的 bootstrap 和安装器，失败时改用 GitHub 同版本备份，并校验 HTTPS、文件大小和 SHA-256；带签名的后续版本还会校验 Authenticode 与精确发布者。安装器备份 WorkBuddy 配置、合并 `xiaoye-image` 并调用 `/v1/account/balance` 自检。只有新版自检成功后，才会移除指向 `xiaoyeai.cn` 的自有旧版 `image-bridge`；失败会恢复原配置。安装码通过当前用户临时文件传递，不进入 URL；长期 Key 不进入聊天、命令行或安装日志。
 
-WorkBuddy 不能执行本机命令时，使用网站显示的固定版本 GitHub Release 地址手动安装。个人 Key 只在登录后的“MCP Key”页面显示，不要把 Key 发到聊天或截图中。
+WorkBuddy 不能执行本机命令时，使用网站显示的腾讯云固定版本地址手动安装。个人 Key 只在登录后的“MCP Key”页面显示，不要把 Key 发到聊天或截图中。
 
 在 WorkBuddy 调用 `generate_image`；任务超过 90 秒时用 `get_generation` 查询，用 `get_balance` 查看可用与冻结额度。
 
@@ -108,24 +108,25 @@ WorkBuddy 不能执行本机命令时，使用网站显示的固定版本 GitHub
 
 ## 安装器发布
 
-生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`、`WORKBUDDY_INSTALLER_VERSION=1.2.0` 和公开仓库 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。安装文件只通过该仓库的固定版本 GitHub Release 分发：
+生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`、`WORKBUDDY_INSTALLER_VERSION=1.2.1`、腾讯云版本目录 `WORKBUDDY_RELEASE_BASE_URL` 和公开仓库 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。腾讯云作为默认下载地址，GitHub Release 保存同版本备份：
 
 - `workbuddy-image-mcp.ps1`
-- `workbuddy-image-mcp-1.2.0.json`
-- `WorkBuddy-Image-MCP-Setup-1.2.0.exe`
+- `workbuddy-image-mcp-1.2.1.json`
+- `WorkBuddy-Image-MCP-Setup-1.2.1.exe`
 
-推送 `v1.2.0` 标签后，`.github/workflows/release.yml` 使用 Node.js 22 和 Inno Setup 构建、测试并先创建草稿 Release；三个文件完整、非空且清单哈希一致后才公开。任何上传或核对失败都会删除草稿。未签名 1.2.0 是公开内测版，Windows 可能显示“未知发布者”；正式签名不阻塞首版。
+推送 `v1.2.1` 标签后，`.github/workflows/release.yml` 使用 Node.js 22 和 Inno Setup 只构建一次正式三件套；三个文件完整、非空且清单哈希一致后才公开。随后从 GitHub Release 下载这三个原文件，不做修改或重新构建，人工上传到腾讯云 `releases/v1.2.1/` 目录。这样腾讯云和 GitHub 的 EXE 使用同一个 SHA-256。未签名 1.2.1 是公开内测版，Windows 可能显示“未知发布者”。
 
-后端每 5 分钟检查一次 Release，校验 bootstrap 大于 1 KiB、EXE 大于 10 MiB、版本和 SHA-256 一致。检查未通过时，`GET /api/install-release/status` 返回未就绪，网站禁用提示词与下载操作，也不会签发新的 30 分钟一次性安装码。
+后端每 5 分钟检查一次腾讯云版本目录，校验 bootstrap 大于 1 KiB、EXE 大于 10 MiB、清单版本和下载地址一致。安装时再对实际 EXE 做 SHA-256 校验。检查未通过时，`GET /api/install-release/status` 返回未就绪，网站禁用提示词与下载操作，也不会签发新的 30 分钟一次性安装码。
 
-本地构建机需安装 Inno Setup 6，并显式提供公开仓库：
+本地构建只用于开发验证，不作为正式腾讯云文件。构建机需安装 Inno Setup 6，并显式提供公开仓库和测试下载目录：
 
 ```powershell
 $env:WORKBUDDY_RELEASE_REPOSITORY = "owner/repository"
+$env:WORKBUDDY_RELEASE_BASE_URL = "https://download.example.com/releases/v1.2.1"
 npm run installer:build
 ```
 
-如配置 `$env:CODE_SIGN_CERT_SHA1`，构建脚本会额外签名并验证发布者 `CN=Xiaoye AI`。安装后开始菜单提供“检测连接”和“修复配置”；卸载时只删除 `xiaoye-image` 条目。内测开放前只保留两个安装阻断条件：GitHub Release 三件套完整且哈希一致；一套无 Node.js 的干净 Windows 环境完成“复制提示词 → 授权 → 安装 → 开启 → `get_balance`”全流程。
+如配置 `$env:CODE_SIGN_CERT_SHA1`，构建脚本会额外签名并验证发布者 `CN=Xiaoye AI`。安装后开始菜单提供“检测连接”和“修复配置”；卸载时只删除 `xiaoye-image` 条目。内测开放前确认腾讯云三件套可公开读取且哈希一致，并在一套无 Node.js 的干净 Windows 环境完成“复制提示词 → 授权 → 安装 → 开启 → `get_balance`”全流程。
 
 ## 主要接口
 

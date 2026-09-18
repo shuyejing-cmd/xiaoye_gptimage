@@ -27,7 +27,7 @@ export async function createPlatformRuntime(config) {
   const authService = createAuthService({ pool, pepper: config.authPepper, mailer });
   const apiKeyService = createApiKeyService({ pool, pepper: config.apiKeyPepper, cipher: createPayloadCipher({ key: config.apiKeyEncryptionKey }) });
   const installationTokenService = createInstallationTokenService({ pool, pepper: config.installationTokenPepper, apiKeyService });
-  const releaseService = createReleaseService({ repository: config.releaseRepository, version: config.installerVersion });
+  const releaseService = createReleaseService({ repository: config.releaseRepository, version: config.installerVersion, releaseBaseUrl: config.releaseBaseUrl });
   const walletService = createWalletService({ pool });
   const generationJobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: config.payloadEncryptionKey }), requestIdFactory: randomUUID });
   const paymentService = createPaymentService({ pool, proofStore, orderNoFactory: () => `WB${Date.now()}${randomUUID().slice(0, 8).toUpperCase()}` });
