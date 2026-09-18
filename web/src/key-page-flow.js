@@ -18,3 +18,8 @@ export async function createKeyWithPrompt({ request, name, onKeyCreated, issuePr
 export function isPromptExpired(expiresAt, now = Date.now()) {
   return !expiresAt || new Date(expiresAt).getTime() <= now;
 }
+
+export function resolveSelectedKeyId(keys, selectedId) {
+  if (keys.some((key) => key.id === selectedId)) return selectedId;
+  return keys[0]?.id || "";
+}

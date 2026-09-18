@@ -54,3 +54,15 @@ test("detects both sides of the prompt expiry timestamp", () => {
   assert.equal(flow.isPromptExpired(expiry, Date.parse("2026-09-16T12:09:59.999Z")), false);
   assert.equal(flow.isPromptExpired(expiry, Date.parse(expiry)), true);
 });
+
+test("keeps the selected key when it still exists", () => {
+  assert.equal(flow.resolveSelectedKeyId([{ id: "a" }, { id: "b" }], "b"), "b");
+});
+
+test("selects the first remaining key after deletion", () => {
+  assert.equal(flow.resolveSelectedKeyId([{ id: "b" }, { id: "c" }], "a"), "b");
+});
+
+test("clears key selection when no keys remain", () => {
+  assert.equal(flow.resolveSelectedKeyId([], "a"), "");
+});
