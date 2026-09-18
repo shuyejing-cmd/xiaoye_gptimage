@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { formatInstallExpiry, installationPromptStatus, installReleaseView } from "./mcp-config.js";
 import { requestHeaders } from "./http-options.js";
 import { createKeyWithPrompt, isPromptExpired } from "./key-page-flow.js";
+import profileAvatar from "./assets/profile-avatar.png";
 
 async function api(path, options = {}) {
   const response = await fetch(path, { credentials: "same-origin", ...options, headers: requestHeaders(options) });
@@ -56,29 +57,24 @@ function Login({ onLogin }) {
     } catch (reason) { setError(reason.message); } finally { setBusy(false); }
   };
   return <main className="landing">
-    <section className="hero">
-      <div className="registration-mark top-left"/><div className="registration-mark bottom-right"/>
-      <div className="hero-copy">
-        <h1>图片生成，<br/>按交付结算。</h1>
-        <p>专为 WorkBuddy 准备的图片 MCP。只有图片验证完成并可靠保存后才扣除一次额度；失败会释放，未知结果留待对账。</p>
+    <section className="login-scene">
+      <div className="login-story">
+        <div className="login-copy">
+          <h1>让灵感，<br/>在对话里生长。</h1>
+          <p>专为 WorkBuddy 准备的图片生成服务。图片完成验证并可靠交付后才扣除一次额度；失败自动释放，未知结果继续对账。</p>
+        </div>
+        <figure className="profile-hero"><img src={profileAvatar} alt="小叶坐在草地上的个人头像" /></figure>
       </div>
-      <div className="settlement-diagram" aria-label="计费流程">
-        <div><strong>01</strong><span>冻结一份额度</span></div>
-        <i/>
-        <div><strong>02</strong><span>生成并验证图片</span></div>
-        <i/>
-        <div><strong>03</strong><span>交付后结算</span></div>
+      <div className="login-panel glass-panel">
+        <div className="login-brand"><span>WB</span><b>WorkBuddy 图片 MCP</b></div>
+        <div className="entry-copy"><h2>{step === "email" ? "登录或创建账户" : "查收验证码"}</h2><p>{step === "email" ? "验证邮箱后即可创建个人 Key。符合规则的新账户会获得 5 次体验额度。" : `验证码已发送到 ${email}，10 分钟内有效。`}</p></div>
+        <form onSubmit={submit}>
+          {step === "email" ? <label>邮箱地址<input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" /></label> : <label>六位验证码<input required inputMode="numeric" pattern="[0-9]{6}" maxLength="6" value={code} onChange={e => setCode(e.target.value)} placeholder="000000" autoFocus /></label>}
+          {error && <p className="error" role="alert">{error}</p>}
+          <button className="primary" disabled={busy}>{busy ? "正在处理…" : step === "email" ? "发送验证码" : "验证并进入"}</button>
+          {step === "code" && <button type="button" className="text-button" onClick={() => setStep("email")}>更换邮箱</button>}
+        </form>
       </div>
-    </section>
-    <section className="entry-sheet">
-      <div className="stamp" aria-hidden="true"><span>WORKBUDDY · IMAGE · MCP ·</span><b>WB</b></div>
-      <div className="entry-copy"><h2>{step === "email" ? "登录或创建账户" : "查收验证码"}</h2><p>{step === "email" ? "验证邮箱后即可创建个人 Key。符合规则的新账户会获得 5 次体验额度。" : `验证码已发送到 ${email}，10 分钟内有效。`}</p></div>
-      <form onSubmit={submit}>
-        {step === "email" ? <label>邮箱地址<input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" /></label> : <label>六位验证码<input required inputMode="numeric" pattern="[0-9]{6}" maxLength="6" value={code} onChange={e => setCode(e.target.value)} placeholder="000000" autoFocus /></label>}
-        {error && <p className="error" role="alert">{error}</p>}
-        <button className="primary" disabled={busy}>{busy ? "正在处理…" : step === "email" ? "发送验证码" : "验证并进入"}</button>
-        {step === "code" && <button type="button" className="text-button" onClick={() => setStep("email")}>更换邮箱</button>}
-      </form>
     </section>
   </main>;
 }
@@ -233,7 +229,8 @@ export default function App() {
   useEffect(()=>{if(me)mainRef.current?.focus()},[page,me]);
   if (loading) return <div className="boot">正在核对账户…</div>;
   if (!me) return <Login onLogin={result=>setMe(result)}/>;
+  const logout = async () => { await api("/api/auth/logout", { method: "POST" }); setMe(null); };
   const items = [["overview","overview","概览"],["recharge","recharge","充值"],["keys","key","MCP Key"],["install","install","安装向导"],...(me.user.role==="admin"?[["admin","admin","管理后台"]]:[])];
   const pages={overview:<Overview me={me}/>,recharge:<Recharge/>,keys:<Keys/>,install:<Install/>,admin:<Admin/>};
-  return <><a className="skip-link" href="#main-content">跳到主要内容</a><div className="app-shell"><aside><button className="wordmark" onClick={()=>setPage("overview")}><span>W/B</span><b>WorkBuddy<br/>图片 MCP</b></button><nav aria-label="账户功能">{items.map(([id,icon,label])=><button key={id} className={page===id?"active":""} aria-current={page===id?"page":undefined} onClick={()=>setPage(id)}><Icon name={icon}/>{label}</button>)}</nav><div className="account"><span>{me.user.email}</span><button onClick={async()=>{await api("/api/auth/logout",{method:"POST"});setMe(null)}}>退出登录</button></div></aside><main id="main-content" className="content" ref={mainRef} tabIndex="-1"><div className="top-register"><span>{new Date().toLocaleDateString("zh-CN")}</span><span>ACCOUNT / {String(me.user.id).padStart(6,"0")}</span></div>{pages[page]}</main></div></>;
+  return <><a className="skip-link" href="#main-content">跳到主要内容</a><div className={`app-shell ${page === "admin" ? "admin-surface" : "user-surface"}`}><aside><button className="wordmark" onClick={()=>setPage("overview")}><span>W/B</span><b>WorkBuddy<br/>图片 MCP</b></button><nav aria-label="账户功能">{items.map(([id,icon,label])=><button key={id} className={page===id?"active":""} aria-current={page===id?"page":undefined} onClick={()=>setPage(id)}><Icon name={icon}/>{label}</button>)}</nav><div className="account">{page !== "admin" && <img src={profileAvatar} alt="个人头像"/>}<div><span>{me.user.email}</span><button onClick={logout}>退出登录</button></div></div></aside><main id="main-content" className="content" ref={mainRef} tabIndex="-1"><div className="top-register"><span>{new Date().toLocaleDateString("zh-CN")}</span><span>ACCOUNT / {String(me.user.id).padStart(6,"0")}</span></div>{pages[page]}</main></div></>;
 }
