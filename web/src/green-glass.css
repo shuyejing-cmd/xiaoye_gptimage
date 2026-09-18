@@ -167,6 +167,89 @@
 .key-detail .prompt-body pre { max-height: 278px; margin: 0 0 9px; padding: 18px; overflow: auto; border: 1px solid rgba(26,75,51,.14); border-radius: 16px; background: rgba(21,52,39,.92); color: #e9fae1; font-size: 12px; line-height: 1.65; white-space: pre-wrap; }
 .key-detail .prompt-body > small { color: var(--glass-muted); }
 
+.overview-page .balance-band { display: grid; grid-template-columns: repeat(2,minmax(150px,210px)) minmax(220px,1fr); align-items: center; gap: 0; margin-bottom: 22px; padding: 0; overflow: hidden; }
+.overview-page .balance-band > div { min-height: 150px; display: flex; flex-direction: column; justify-content: center; padding: 28px 34px; border-right: 1px solid var(--glass-rule); }
+.overview-page .balance-band span { color: var(--glass-muted); font-size: 12px; font-weight: 650; }
+.overview-page .balance-band strong { margin-top: 7px; color: var(--forest); font-size: 48px; line-height: 1; letter-spacing: -.05em; }
+.overview-page .balance-band > p { margin: 0; padding: 28px 34px; color: var(--glass-muted); line-height: 1.8; }
+.user-surface .split-ledger { gap: 18px; }
+.user-surface .ledger-panel { min-width: 0; padding: 26px; box-shadow: inset 0 1px rgba(255,255,255,.9), 0 12px 34px rgba(31,104,72,.08); }
+.user-surface .ledger-panel h2 { margin-top: 0; }
+.user-surface .ledger-panel table { width: 100%; }
+.user-surface .ledger-panel th { color: var(--glass-muted); }
+.user-surface .ledger-panel tr { border-bottom-color: var(--glass-rule); }
+.user-surface .entries li { border-bottom-color: var(--glass-rule); }
+
+.recharge-page .package-strip { gap: 14px; }
+.recharge-page .package-strip > button { min-height: 156px; padding: 22px; border-radius: 22px !important; background: var(--glass) !important; color: var(--glass-ink) !important; box-shadow: inset 0 1px white, 0 12px 34px rgba(31,104,72,.08) !important; backdrop-filter: blur(18px); }
+.recharge-page .package-strip > button:hover { transform: translateY(-2px); }
+.recharge-page .package-strip strong { color: var(--forest); font-size: 30px; }
+.recharge-page .payment-channels, .recharge-page .orders { padding: 22px; border: 1px solid var(--glass-edge); border-radius: 24px; background: var(--glass); box-shadow: inset 0 1px white, 0 12px 34px rgba(31,104,72,.08); backdrop-filter: blur(18px); }
+.recharge-page .payment-channels > div, .recharge-page .orders article { border-bottom-color: var(--glass-rule); }
+
+.install-page .install-flow { gap: 18px; }
+.install-page .install-flow > ol, .install-page .download-plate { border: 1px solid var(--glass-edge); border-radius: 26px; background: var(--glass); box-shadow: inset 0 1px white, 0 12px 34px rgba(31,104,72,.08); backdrop-filter: blur(20px); }
+.install-page .install-flow > ol { padding: 30px 30px 30px 70px; }
+.install-page .install-flow li::marker { color: var(--forest); font-weight: 750; }
+.install-page .download-plate { padding: 34px; }
+.install-page .download-plate svg { color: var(--forest); }
+
+@media (max-width: 1100px) {
+  .login-scene { grid-template-columns: 1fr; }
+  .login-story { min-height: 620px; }
+  .login-copy { padding-bottom: 330px; }
+  .profile-hero { left: 0; right: auto; width: min(500px, 72vw); }
+  .login-panel { width: min(100%, 620px); justify-self: center; }
+  .user-surface .page { width: min(100% - 38px, 980px); }
+  .overview-page .balance-band { grid-template-columns: 1fr 1fr; }
+  .overview-page .balance-band > p { grid-column: 1 / -1; border-top: 1px solid var(--glass-rule); }
+  .key-workspace { grid-template-columns: 210px minmax(0,1fr); }
+}
+
+@media (max-width: 760px) {
+  .login-scene { min-height: 100vh; gap: 26px; padding: 24px 18px 38px; }
+  .login-story { min-height: 500px; justify-content: flex-start; padding-top: 34px; }
+  .login-copy { padding-bottom: 260px; }
+  .login-copy h1 { font-size: clamp(42px, 13vw, 62px); }
+  .login-copy p { font-size: 15px; line-height: 1.6; }
+  .profile-hero { width: min(330px, 82vw); border-radius: 24px; }
+  .login-panel { padding: 26px 22px; border-radius: 22px; }
+  .login-brand { margin-bottom: 38px; }
+
+  .user-surface { padding-bottom: 76px; }
+  .user-surface > aside { position: fixed; z-index: 20; top: auto; bottom: 10px; left: 10px; width: calc(100% - 20px); height: 66px; margin: 0; padding: 7px 9px; border: 1px solid var(--glass-edge); border-radius: 20px; }
+  .user-surface .wordmark, .user-surface .account { display: none; }
+  .user-surface nav { height: 100%; grid-template-columns: repeat(4, minmax(0,1fr)); padding: 0; gap: 3px; }
+  .user-surface nav button, .user-surface nav button:not(.active), .user-surface nav button.active { min-width: 0; justify-content: center; padding: 6px 2px; border-radius: 13px; font-size: 9px; }
+  .user-surface nav button:hover { transform: none; }
+  .user-surface .top-register { padding: 0 18px; }
+  .user-surface .page { width: 100%; padding: 30px 18px 36px; }
+  .user-surface .page-head h1 { font-size: 38px; }
+  .key-page-head { display: grid; align-items: start; }
+  .key-page-head .toolbar { width: 100%; justify-content: space-between; }
+  .release-strip-compact { align-items: flex-start; }
+  .release-strip-compact > div { display: grid; gap: 4px; }
+  .key-workspace { min-height: 0; grid-template-columns: 1fr; border-radius: 22px; }
+  .key-selector { display: flex; gap: 8px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--glass-rule); }
+  .key-selector > button { flex: 0 0 min(230px, 78vw); margin: 0; }
+  .key-detail { padding: 22px 18px 26px; }
+  .key-detail-head { align-items: flex-start; }
+  .key-secret-row { grid-template-columns: 1fr; }
+  .key-secret-row button { min-height: 42px; }
+  .key-detail .prompt-header { align-items: flex-start; }
+  .key-detail .prompt-actions { align-items: stretch; flex-wrap: wrap; }
+  .key-detail .prompt-actions button { flex: 1 1 130px; }
+  .overview-page .balance-band { grid-template-columns: 1fr 1fr; }
+  .overview-page .balance-band > div { min-height: 120px; padding: 22px 20px; }
+  .overview-page .balance-band strong { font-size: 40px; }
+  .overview-page .balance-band > p { padding: 22px 20px; }
+  .user-surface .split-ledger { gap: 16px; }
+  .user-surface .ledger-panel { padding: 20px 16px; }
+  .recharge-page .payment-channels, .recharge-page .orders { padding: 18px; }
+  .install-page .install-flow > ol { padding: 22px 20px 22px 52px; }
+  .install-page .download-plate { padding: 26px 22px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .landing *, .user-surface * { scroll-behavior:auto !important; transition:none !important; animation:none !important; }
 }

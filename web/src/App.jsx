@@ -82,11 +82,11 @@ function Login({ onLogin }) {
 function Overview({ me }) {
   const [data, setData] = useState({ entries: [], generations: [], loading: true, error: "" });
   useEffect(() => { Promise.all([api("/api/ledger"), api("/api/generations")]).then(([ledger, jobs]) => setData({ entries: ledger.entries, generations: jobs.generations, loading: false, error: "" })).catch(error => setData(current => ({ ...current, loading: false, error: error.message }))); }, []);
-  return <section className="page"><header className="page-head"><h1>你的使用台账</h1><p>生成记录不展示图片或提示词，只保留状态和扣费事实。</p></header>
-    <div className="balance-band"><div><span>可用额度</span><strong>{me.wallet.available_credits}</strong></div><div><span>冻结额度</span><strong>{me.wallet.held_credits}</strong></div><p>成功交付一张扣除 1 次<br/>充值额度永久有效</p></div>
+  return <section className="page overview-page"><header className="page-head"><h1>你的使用台账</h1><p>生成记录不展示图片或提示词，只保留状态和扣费事实。</p></header>
+    <div className="balance-band glass-panel"><div><span>可用额度</span><strong>{me.wallet.available_credits}</strong></div><div><span>冻结额度</span><strong>{me.wallet.held_credits}</strong></div><p>成功交付一张扣除 1 次<br/>充值额度永久有效</p></div>
     {data.error && <p className="error" role="alert">台账读取失败：{data.error}</p>}
-    <div className="split-ledger"><div><h2>最近任务</h2>{data.loading ? <Loading/> : data.generations.length ? <table><thead><tr><th>任务</th><th>状态</th><th>时间</th></tr></thead><tbody>{data.generations.map(x => <tr key={x.request_id}><td className="mono">{x.request_id.slice(0, 13)}…</td><td><Status value={x.state}/></td><td>{new Date(x.created_at).toLocaleString("zh-CN")}</td></tr>)}</tbody></table> : <Empty>还没有生成任务。完成安装后可直接在 WorkBuddy 中使用。</Empty>}</div>
-    <div><h2>额度流水</h2>{data.loading ? <Loading/> : data.entries.length ? <ul className="entries">{data.entries.map(x => <li key={x.id}><div><b>{({ signup_bonus:"注册赠送", first_recharge_bonus:"首次充值赠送", recharge:"充值到账", hold:"生成冻结", capture:"成功结算", release:"失败释放", admin_adjustment:"人工调账" })[x.event_type]}</b><span>{new Date(x.created_at).toLocaleString("zh-CN")}</span></div><strong className={x.amount > 0 ? "positive" : ""}>{x.amount > 0 ? "+" : ""}{x.amount}</strong></li>)}</ul> : <Empty>账本尚无记录。</Empty>}</div></div>
+    <div className="split-ledger"><div className="ledger-panel glass-panel"><h2>最近任务</h2>{data.loading ? <Loading/> : data.generations.length ? <table><thead><tr><th>任务</th><th>状态</th><th>时间</th></tr></thead><tbody>{data.generations.map(x => <tr key={x.request_id}><td className="mono">{x.request_id.slice(0, 13)}…</td><td><Status value={x.state}/></td><td>{new Date(x.created_at).toLocaleString("zh-CN")}</td></tr>)}</tbody></table> : <Empty>还没有生成任务。完成安装后可直接在 WorkBuddy 中使用。</Empty>}</div>
+    <div className="ledger-panel glass-panel"><h2>额度流水</h2>{data.loading ? <Loading/> : data.entries.length ? <ul className="entries">{data.entries.map(x => <li key={x.id}><div><b>{({ signup_bonus:"注册赠送", first_recharge_bonus:"首次充值赠送", recharge:"充值到账", hold:"生成冻结", capture:"成功结算", release:"失败释放", admin_adjustment:"人工调账" })[x.event_type]}</b><span>{new Date(x.created_at).toLocaleString("zh-CN")}</span></div><strong className={x.amount > 0 ? "positive" : ""}>{x.amount > 0 ? "+" : ""}{x.amount}</strong></li>)}</ul> : <Empty>账本尚无记录。</Empty>}</div></div>
   </section>;
 }
 
@@ -187,7 +187,7 @@ function Recharge() {
   useEffect(() => { load().catch(e => setError(e.message)); }, [load]);
   const createOrder = async packageId => { setBusy(`package-${packageId}`); setError(""); try { await api("/api/recharge-orders", { method:"POST", body:JSON.stringify({ package_id: packageId }) }); await load(); } catch(e){ setError(e.message); } finally {setBusy("")} };
   const upload = async (id, file) => { const form = new FormData(); form.append("proof", file); setBusy(`order-${id}`); setError(""); try { await api(`/api/recharge-orders/${id}/proof`, { method:"POST", body:form }); await load(); } catch(e){ setError(e.message); } finally {setBusy("")} };
-  return <section className="page"><header className="page-head"><h1>充值额度</h1><p>选择固定套餐后，按收款码付款并上传截图。管理员确认到账后额度永久有效。</p></header>
+  return <section className="page recharge-page"><header className="page-head"><h1>充值额度</h1><p>选择固定套餐后，按收款码付款并上传截图。管理员确认到账后额度永久有效。</p></header>
     {error && <p className="error" role="alert">{error}</p>}
     <div className="package-strip">{loading ? <Loading/> : packages.length ? packages.map(x => <button key={x.id} disabled={Boolean(busy)} onClick={() => createOrder(x.id)}><span>{x.name}</span><strong>{x.credits} 次</strong><small>{busy===`package-${x.id}` ? "正在创建…" : `¥${(x.price_fen/100).toFixed(2)} · 创建订单`}</small></button>) : <Empty>管理员尚未上架充值套餐。</Empty>}</div>
     {channels.length > 0 && <div className="payment-channels">{channels.map(c => <div key={c.id}><img src={c.qr_url} alt={`${c.name}收款码`}/><div><h2>{c.name}</h2><p>{c.instructions || "付款时请备注订单号，完成后上传付款截图。"}</p></div></div>)}</div>}
@@ -197,7 +197,7 @@ function Recharge() {
 
 function Install() {
   const release = useInstallRelease();
-  return <section className="page"><header className="page-head"><h1>把图片 MCP 装进 WorkBuddy</h1><p>正常流程不需要判断 Node.js、安装目录或配置路径，只需复制一段提示词。</p></header>
+  return <section className="page install-page"><header className="page-head"><h1>把图片 MCP 装进 WorkBuddy</h1><p>正常流程不需要判断 Node.js、安装目录或配置路径，只需复制一段提示词。</p></header>
     <div className="install-flow"><ol><li><b>创建个人 Key</b><p>前往“MCP Key”页面创建一个有效 Key。</p></li><li><b>复制提示词给 WorkBuddy</b><p>生成 30 分钟有效、只能使用一次的安装提示词并粘贴到 WorkBuddy。</p></li><li><b>确认一次执行权限</b><p>WorkBuddy 自动下载、验证和运行固定版本安装器，并安全合并配置。</p></li><li><b>开启并检查连接</b><p>开启 xiaoye-image；如果没有出现就重启 WorkBuddy，再调用 get_balance 确认余额。</p></li></ol><div className="download-plate"><Icon name="install"/><h2>手动备用安装</h2><p>{release.ready ? "WorkBuddy 不能执行本机命令时使用。" : release.label}</p>{release.ready && release.installerUrl ? <a className="primary" href={release.installerUrl} target="_blank" rel="noreferrer">下载安装器</a> : <button className="primary" disabled>安装服务准备中</button>}<small>当前为公开内测版，Windows 可能显示“未知发布者”。默认从腾讯云下载，GitHub 保留同版本备份。</small>{!release.ready && <button className="text-button release-retry" onClick={release.reload}>重新检查</button>}</div></div>
   </section>;
 }
