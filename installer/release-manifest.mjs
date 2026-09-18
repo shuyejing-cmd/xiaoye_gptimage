@@ -1,20 +1,27 @@
 import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
-export function buildReleaseManifest({ version, sha256, signed = false, publisher, installerUrl }) {
+function requireHttps(value) {
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.username || url.password) throw new Error("installer URL must use HTTPS");
+  return url.href;
+}
+
+export function buildReleaseManifest({ version, sha256, signed = false, publisher, installerUrl, fallbackInstallerUrls = [] }) {
   if (!/^\d+\.\d+\.\d+$/.test(String(version || ""))) throw new Error("invalid release version");
   if (!/^[a-f0-9]{64}$/i.test(String(sha256 || ""))) throw new Error("invalid SHA-256 digest");
   if (typeof signed !== "boolean") throw new Error("signed must be a boolean");
   if (signed && !String(publisher || "").trim()) throw new Error("publisher is required for signed releases");
-  const url = new URL(installerUrl);
-  if (url.protocol !== "https:") throw new Error("installer URL must use HTTPS");
+  const installer = requireHttps(installerUrl);
+  const fallbacks = fallbackInstallerUrls.map(requireHttps);
   return {
     version: String(version),
     sha256: String(sha256),
     channel: signed ? "stable" : "beta",
     signed,
     ...(signed ? { publisher: String(publisher) } : {}),
-    installer_url: url.href
+    installer_url: installer,
+    ...(fallbacks.length ? { fallback_installer_urls: fallbacks } : {})
   };
 }
 
@@ -32,7 +39,8 @@ async function main() {
     sha256: args["--sha256"],
     signed: String(args["--signed"]).toLowerCase() === "true",
     publisher: args["--publisher"],
-    installerUrl: args["--installer-url"]
+    installerUrl: args["--installer-url"],
+    fallbackInstallerUrls: args["--fallback-installer-url"] ? [args["--fallback-installer-url"]] : []
   });
   if (!args["--output"]) throw new Error("output path is required");
   await writeFile(args["--output"], `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o644 });
