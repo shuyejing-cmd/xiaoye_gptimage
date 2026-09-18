@@ -136,7 +136,7 @@
 .release-strip-compact > a { color: var(--forest); font-size: 13px; font-weight: 700; white-space: nowrap; }
 
 .key-workspace { min-height: 560px; display: grid; grid-template-columns: 250px minmax(0,1fr); overflow: hidden; }
-.key-selector { padding: 14px; border-right: 1px solid var(--glass-rule); background: rgba(229,247,221,.34); }
+.user-surface .key-selector { position: static; top: auto; height: auto; display: block; margin: 0; padding: 14px; overflow: visible; border: 0; border-right: 1px solid var(--glass-rule); border-radius: 0; background: rgba(229,247,221,.34); box-shadow: none; backdrop-filter: none; }
 .key-selector > button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 8px; padding: 13px; text-align: left; box-shadow: none !important; transition: background .16s ease-out, transform .16s ease-out; }
 .key-selector > button:hover { background: rgba(255,255,255,.82) !important; transform: translateX(2px); }
 .key-selector > button.selected { border-color: rgba(31,104,72,.25) !important; background: rgba(31,104,72,.9) !important; color: white !important; }
@@ -230,10 +230,12 @@
   .release-strip-compact { align-items: flex-start; }
   .release-strip-compact > div { display: grid; gap: 4px; }
   .key-workspace { min-height: 0; grid-template-columns: 1fr; border-radius: 22px; }
-  .key-selector { display: flex; gap: 8px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--glass-rule); }
+  .user-surface .key-selector { display: flex; flex-direction: row; gap: 8px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--glass-rule); }
   .key-selector > button { flex: 0 0 min(230px, 78vw); margin: 0; }
   .key-detail { padding: 22px 18px 26px; }
-  .key-detail-head { align-items: flex-start; }
+  .key-detail-head { display: grid; align-items: flex-start; }
+  .key-detail-head > div:last-child { justify-content: flex-start; }
+  .key-detail-head h2 { overflow-wrap: anywhere; }
   .key-secret-row { grid-template-columns: 1fr; }
   .key-secret-row button { min-height: 42px; }
   .key-detail .prompt-header { align-items: flex-start; }
