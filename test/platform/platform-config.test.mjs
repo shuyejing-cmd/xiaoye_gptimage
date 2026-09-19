@@ -30,7 +30,7 @@ test("installation tokens use an independent pepper and configurable release ori
   const config = loadPlatformConfig(baseEnv);
   assert.equal(config.installationTokenPepper, "installations");
   assert.equal(config.publicOrigin, "https://xiaoyeai.cn");
-  assert.equal(config.installerVersion, "1.2.1");
+  assert.equal(config.installerVersion, "1.2.2");
   assert.equal(config.releaseRepository, null);
   assert.equal(config.releaseBaseUrl, null);
   assert.equal(loadPlatformConfig({ ...baseEnv, WORKBUDDY_RELEASE_REPOSITORY: "owner/repository" }).releaseRepository, "owner/repository");

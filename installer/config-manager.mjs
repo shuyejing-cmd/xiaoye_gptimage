@@ -139,7 +139,7 @@ export async function probeMcpEntry({ entry, spawnImpl = spawn, timeoutMs = 8_00
       jsonrpc: "2.0",
       id: 1,
       method: "initialize",
-      params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "workbuddy-installer-doctor", version: "1.2.1" } }
+      params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "workbuddy-installer-doctor", version: "1.2.2" } }
     });
   });
 }

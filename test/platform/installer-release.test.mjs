@@ -85,14 +85,14 @@ test("unsigned installer builds stage all three GitHub release assets without we
   assert.match(source, /--signed=\$Signed/);
 });
 
-test("GitHub Actions publishes one validated v1.2.1 backup release atomically", async () => {
+test("GitHub Actions publishes one validated v1.2.2 backup release atomically", async () => {
   const source = await readFile(".github/workflows/release.yml", "utf8");
-  assert.match(source, /v1\.2\.1/);
+  assert.match(source, /v1\.2\.2/);
   assert.match(source, /node-version:\s*22/);
   assert.match(source, /npm test/);
   assert.match(source, /npm run web:build/);
   assert.match(source, /installer:build/);
-  for (const name of ["workbuddy-image-mcp.ps1", "workbuddy-image-mcp-1.2.1.json", "WorkBuddy-Image-MCP-Setup-1.2.1.exe"]) assert.match(source, new RegExp(name.replaceAll(".", "\\.")));
+  for (const name of ["workbuddy-image-mcp.ps1", "workbuddy-image-mcp-1.2.2.json", "WorkBuddy-Image-MCP-Setup-1.2.2.exe"]) assert.match(source, new RegExp(name.replaceAll(".", "\\.")));
   assert.match(source, /--draft/);
   assert.match(source, /release delete/);
   assert.match(source, /release edit[^\n]+--draft=false/);
@@ -115,7 +115,7 @@ test("release version and fixed publisher stay synchronized across artifacts", a
     app: app.match(/installerVersion = "([^"]+)"/)?.[1],
     manager: manager.match(/clientInfo: \{ name: "workbuddy-installer-doctor", version: "([^"]+)"/)?.[1]
   };
-  assert.deepEqual(new Set(Object.values(values)), new Set(["1.2.1"]));
+  assert.deepEqual(new Set(Object.values(values)), new Set(["1.2.2"]));
   const publishers = {
     bootstrap: bootstrap.match(/\$ExpectedPublisher = '([^']+)'/)?.[1],
     build: build.match(/\$ExpectedPublisher = '([^']+)'/)?.[1]
