@@ -27,8 +27,10 @@ export async function verifyPrivateTokenFile(tokenFile) {
   if (process.platform !== "win32") return true;
   try {
     const script = [
+      "$ErrorActionPreference='Stop'",
       "$path=$env:WORKBUDDY_INSTALLATION_TOKEN_FILE",
       "if([string]::IsNullOrWhiteSpace($path)){exit 2}",
+      "if(-not (Test-Path -LiteralPath $path -PathType Leaf)){exit 3}",
       "$acl=[System.IO.File]::GetAccessControl($path)",
       "$me=[System.Security.Principal.WindowsIdentity]::GetCurrent().User",
       "$rules=$acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])",
@@ -96,7 +98,7 @@ export async function exchangeInstallationToken({ gatewayUrl, tokenFile, fetchIm
   try {
     if (!(await verifyTokenFile(tokenFile))) throw new InstallationClientError("installation_token_file_insecure");
     const token = (await readFile(tokenFile, "utf8")).trim();
-    if (!token) throw new InstallationClientError("installation_token_invalid");
+    if (!token) throw new InstallationClientError("invalid_installation_token");
     let response;
     try {
       response = await fetchImpl(new URL("/v1/installations/exchange", String(gatewayUrl).replace(/\/+$/, "") + "/"), {
