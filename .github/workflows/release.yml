@@ -3,7 +3,7 @@ name: Release WorkBuddy Image MCP
 on:
   push:
     tags:
-      - v1.2.1
+      - v1.2.2
 
 permissions:
   contents: write
@@ -34,8 +34,8 @@ jobs:
         run: |
           $assets = @(
             'installer/output/workbuddy-image-mcp.ps1',
-            'installer/output/workbuddy-image-mcp-1.2.1.json',
-            'installer/output/WorkBuddy-Image-MCP-Setup-1.2.1.exe'
+            'installer/output/workbuddy-image-mcp-1.2.2.json',
+            'installer/output/WorkBuddy-Image-MCP-Setup-1.2.2.exe'
           )
           foreach ($asset in $assets) {
             if (-not (Test-Path -LiteralPath $asset) -or (Get-Item -LiteralPath $asset).Length -le 0) {
@@ -44,7 +44,7 @@ jobs:
           }
           $manifest = Get-Content -LiteralPath $assets[1] -Raw | ConvertFrom-Json
           $actual = (Get-FileHash -LiteralPath $assets[2] -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($manifest.version -ne '1.2.1' -or $manifest.sha256 -cne $actual) { throw 'Release manifest does not match the installer.' }
+          if ($manifest.version -ne '1.2.2' -or $manifest.sha256 -cne $actual) { throw 'Release manifest does not match the installer.' }
       - name: Publish complete GitHub Release
         shell: powershell
         env:
@@ -57,10 +57,10 @@ jobs:
             $created = $true
             gh release upload $tag `
               'installer/output/workbuddy-image-mcp.ps1' `
-              'installer/output/workbuddy-image-mcp-1.2.1.json' `
-              'installer/output/WorkBuddy-Image-MCP-Setup-1.2.1.exe'
+              'installer/output/workbuddy-image-mcp-1.2.2.json' `
+              'installer/output/WorkBuddy-Image-MCP-Setup-1.2.2.exe'
             $names = @(gh release view $tag --json assets --jq '.assets[].name')
-            $expected = @('workbuddy-image-mcp.ps1', 'workbuddy-image-mcp-1.2.1.json', 'WorkBuddy-Image-MCP-Setup-1.2.1.exe')
+            $expected = @('workbuddy-image-mcp.ps1', 'workbuddy-image-mcp-1.2.2.json', 'WorkBuddy-Image-MCP-Setup-1.2.2.exe')
             if (@(Compare-Object $expected $names).Count -ne 0) { throw 'GitHub Release asset set is incomplete.' }
             gh release edit $tag --draft=false
           } catch {

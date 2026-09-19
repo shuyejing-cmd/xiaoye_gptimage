@@ -39,12 +39,12 @@ test("build and workflow publish exactly the versioned GitHub release assets", a
   ]);
   assert.match(build, /WORKBUDDY_RELEASE_REPOSITORY/);
   assert.doesNotMatch(build, /web\\public/);
-  assert.match(workflow, /v1\.2\.1/);
+  assert.match(workflow, /v1\.2\.2/);
   assert.match(workflow, /WORKBUDDY_RELEASE_BASE_URL/);
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /npm test/);
   assert.doesNotMatch(workflow, /web:build/);
-  for (const name of ["workbuddy-image-mcp.ps1", "workbuddy-image-mcp-1.2.1.json", "WorkBuddy-Image-MCP-Setup-1.2.1.exe"]) {
+  for (const name of ["workbuddy-image-mcp.ps1", "workbuddy-image-mcp-1.2.2.json", "WorkBuddy-Image-MCP-Setup-1.2.2.exe"]) {
     assert.match(workflow, new RegExp(name.replaceAll(".", "\\.")));
   }
   assert.match(workflow, /--draft/);
@@ -53,7 +53,7 @@ test("build and workflow publish exactly the versioned GitHub release assets", a
 
 test("public package contains only the bridge runtime contract", async () => {
   const pkg = JSON.parse(await readFile("package.json", "utf8"));
-  assert.equal(pkg.version, "1.2.1");
+  assert.equal(pkg.version, "1.2.2");
   assert.equal(pkg.engines.node, ">=22.13.0");
   assert.equal(pkg.scripts.bridge, "node src/index.mjs");
   assert.equal(pkg.scripts.gateway, undefined);

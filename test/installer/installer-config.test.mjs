@@ -53,7 +53,7 @@ test("configuration discovery accepts exactly one valid WorkBuddy candidate", as
   }), { configPath: "E:/WorkBuddy/mcp.json", source: "discovered" });
 });
 
-test("configuration discovery rejects ambiguous and missing candidates with stable codes", async () => {
+test("configuration discovery rejects ambiguous candidates with a stable code", async () => {
   const ambiguous = createDiscoveryFixture({
     "D:/one/mcp.json": JSON.stringify({ mcpServers: {} }),
     "E:/two/mcp.json": JSON.stringify({ mcpServers: {} })
@@ -62,10 +62,16 @@ test("configuration discovery rejects ambiguous and missing candidates with stab
     discoverWorkBuddyConfig({ userProfile: "C:/Users/A", candidatePaths: ["D:/one/mcp.json", "E:/two/mcp.json"], ...ambiguous }),
     (error) => error.code === "workbuddy_config_ambiguous"
   );
-  await assert.rejects(
-    discoverWorkBuddyConfig({ userProfile: "C:/Users/A", candidatePaths: ["D:/unrelated/mcp.json"], ...createDiscoveryFixture({ "D:/unrelated/mcp.json": "{}" }) }),
-    (error) => error.code === "workbuddy_config_not_found"
-  );
+});
+
+test("configuration discovery chooses the documented default for a blank Windows user", async () => {
+  const result = await discoverWorkBuddyConfig({
+    userProfile: "C:/Users/A",
+    candidatePaths: [],
+    ...createDiscoveryFixture()
+  });
+  assert.equal(result.configPath.replaceAll("\\", "/"), "C:/Users/A/.workbuddy/mcp.json");
+  assert.equal(result.source, "default_new");
 });
 
 test("a discovered or explicit config path is remembered for doctor, repair, and uninstall", async () => {

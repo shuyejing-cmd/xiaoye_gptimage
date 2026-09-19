@@ -79,5 +79,7 @@ export async function discoverWorkBuddyConfig({
     if (await isValidCandidate(path, { exists, readText })) valid.push(path);
   }
   if (valid.length === 1) return { configPath: valid[0], source: "discovered" };
-  throw new WorkBuddyConfigDiscoveryError(valid.length > 1 ? "workbuddy_config_ambiguous" : "workbuddy_config_not_found");
+  if (valid.length > 1) throw new WorkBuddyConfigDiscoveryError("workbuddy_config_ambiguous");
+  if (defaultPath) return { configPath: defaultPath, source: "default_new" };
+  throw new WorkBuddyConfigDiscoveryError("workbuddy_config_not_found");
 }
