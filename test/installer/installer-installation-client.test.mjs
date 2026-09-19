@@ -70,6 +70,17 @@ test("exchange deletes the token file when network access fails", async () => {
   await assertDeleted(tokenFile);
 });
 
+test("exchange rejects an empty token with the public invalid-token code", async () => {
+  const tokenFile = await tokenFixture("");
+  await assert.rejects(exchangeInstallationToken({
+    gatewayUrl: "https://xiaoyeai.cn",
+    tokenFile,
+    verifyTokenFile: async () => true,
+    fetchImpl: async () => { throw new Error("must not fetch"); }
+  }), (error) => error.code === "invalid_installation_token");
+  await assertDeleted(tokenFile);
+});
+
 test("exchange rejects a token file that is not private to the current user", async () => {
   const tokenFile = await tokenFixture();
   await assert.rejects(exchangeInstallationToken({
@@ -111,6 +122,9 @@ test("the Inno installer exposes token, config, and roots automation parameters"
   assert.match(source, /doctor --install-dir=/);
   assert.match(source, /uninstall --install-dir=/);
   assert.match(source, /RESULTFILE/);
+  assert.doesNotMatch(source, /\{userpictures\}/i);
+  assert.doesNotMatch(source, /\{userprofile\}/i);
+  assert.match(source, /\{%USERPROFILE\}\\Pictures/);
 });
 
 test("Windows ACL verification accepts a file restricted to the current user", { skip: process.platform !== "win32" }, async () => {
@@ -123,4 +137,9 @@ test("Windows ACL verification accepts a file restricted to the current user", {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("Windows ACL verification rejects a missing token file", { skip: process.platform !== "win32" }, async () => {
+  const missing = join(tmpdir(), `wb-missing-token-${crypto.randomUUID()}.txt`);
+  assert.equal(await verifyPrivateTokenFile(missing), false);
 });

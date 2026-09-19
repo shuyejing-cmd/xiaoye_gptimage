@@ -5,7 +5,7 @@
 [Setup]
 AppId={{B5187E32-8649-48EC-BBD0-CBB91366321E}
 AppName=WorkBuddy 图片 MCP
-AppVersion=1.2.2
+AppVersion=1.2.3
 DefaultDirName={autopf}\WorkBuddy Image MCP
 DefaultGroupName=WorkBuddy 图片 MCP
 ArchitecturesAllowed=x64compatible
@@ -56,7 +56,7 @@ begin
   if RootsParam <> '' then
     ImageDirPage.Values[0] := RootsParam
   else
-    ImageDirPage.Values[0] := ExpandConstant('{userpictures}');
+    ImageDirPage.Values[0] := ExpandConstant('{%USERPROFILE}\Pictures');
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;

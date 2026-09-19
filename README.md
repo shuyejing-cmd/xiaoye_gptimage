@@ -36,10 +36,10 @@ bridge 读取以下环境变量：
 
 ## Release
 
-推送 `v1.2.2` 标签会触发 GitHub Actions，在 Windows runner 上测试并生成：
+推送 `v1.2.3` 标签会触发 GitHub Actions，在 Windows runner 上测试并生成：
 
 - `workbuddy-image-mcp.ps1`
-- `workbuddy-image-mcp-1.2.2.json`
-- `WorkBuddy-Image-MCP-Setup-1.2.2.exe`
+- `workbuddy-image-mcp-1.2.3.json`
+- `WorkBuddy-Image-MCP-Setup-1.2.3.exe`
 
-当前 1.2.2 为未签名公开内测版，Windows 可能显示“未知发布者”。正式文件只由 GitHub Actions 构建一次，并将同一批文件原样镜像到腾讯云 COS。
+当前 1.2.3 为未签名公开内测版，Windows 可能显示“未知发布者”。正式文件只由 GitHub Actions 构建一次，并将同一批文件原样镜像到腾讯云 COS。
