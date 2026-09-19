@@ -108,13 +108,13 @@ WorkBuddy 不能执行本机命令时，使用网站显示的腾讯云固定版�
 
 ## 安装器发布
 
-生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`、`WORKBUDDY_INSTALLER_VERSION=1.2.2`、腾讯云版本目录 `WORKBUDDY_RELEASE_BASE_URL` 和公开仓库 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。腾讯云作为默认下载地址，GitHub Release 保存同版本备份：
+生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`、`WORKBUDDY_INSTALLER_VERSION=1.2.3`、腾讯云版本目录 `WORKBUDDY_RELEASE_BASE_URL` 和公开仓库 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。腾讯云作为默认下载地址，GitHub Release 保存同版本备份：
 
 - `workbuddy-image-mcp.ps1`
-- `workbuddy-image-mcp-1.2.2.json`
-- `WorkBuddy-Image-MCP-Setup-1.2.2.exe`
+- `workbuddy-image-mcp-1.2.3.json`
+- `WorkBuddy-Image-MCP-Setup-1.2.3.exe`
 
-推送 `v1.2.2` 标签后，`.github/workflows/release.yml` 使用 Node.js 22 和 Inno Setup 只构建一次正式三件套；三个文件完整、非空且清单哈希一致后才公开。随后从 GitHub Release 下载这三个原文件，不做修改或重新构建，人工上传到腾讯云 `releases/v1.2.2/` 目录。这样腾讯云和 GitHub 的 EXE 使用同一个 SHA-256。未签名 1.2.2 是公开内测版，Windows 可能显示“未知发布者”。
+推送 `v1.2.3` 标签后，`.github/workflows/release.yml` 使用 Node.js 22 和 Inno Setup 只构建一次正式三件套，并运行打包后 bridge 握手与真实 EXE 初始化检查；三个文件完整、非空且清单哈希一致后才公开。随后从 GitHub Release 下载这三个原文件，不做修改或重新构建，人工上传到腾讯云 `releases/v1.2.3/` 目录。这样腾讯云和 GitHub 的 EXE 使用同一个 SHA-256。未签名 1.2.3 是公开内测版，Windows 可能显示“未知发布者”。
 
 后端每 5 分钟检查一次腾讯云版本目录，校验 bootstrap 大于 1 KiB、EXE 大于 10 MiB、清单版本和下载地址一致。安装时再对实际 EXE 做 SHA-256 校验。检查未通过时，`GET /api/install-release/status` 返回未就绪，网站禁用提示词与下载操作，也不会签发新的 30 分钟一次性安装码。
 
@@ -122,7 +122,7 @@ WorkBuddy 不能执行本机命令时，使用网站显示的腾讯云固定版�
 
 ```powershell
 $env:WORKBUDDY_RELEASE_REPOSITORY = "owner/repository"
-$env:WORKBUDDY_RELEASE_BASE_URL = "https://download.example.com/releases/v1.2.2"
+$env:WORKBUDDY_RELEASE_ROOT_URL = "https://download.example.com/releases"
 npm run installer:build
 ```
 

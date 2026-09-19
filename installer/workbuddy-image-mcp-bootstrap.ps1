@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ExpectedPublisher = 'CN=Xiaoye AI'
-$ExpectedVersion = '1.2.2'
+$ExpectedVersion = '1.2.3'
 $ManifestPath = $null
 $InstallerPath = $null
 $ResultPath = $null
@@ -57,7 +57,14 @@ function Invoke-DownloadWithRetry {
 }
 
 function Resolve-PrivateTokenFile([string]$Value) {
-  $Resolved = (Resolve-Path -LiteralPath $Value).Path
+  if ([string]::IsNullOrWhiteSpace($Value) -or -not (Test-Path -LiteralPath $Value -PathType Leaf)) {
+    throw 'installation_token_file_insecure'
+  }
+  try {
+    $Resolved = (Resolve-Path -LiteralPath $Value -ErrorAction Stop).Path
+  } catch {
+    throw 'installation_token_file_insecure'
+  }
   $FullPath = [IO.Path]::GetFullPath($Resolved)
   if (-not $FullPath.StartsWith($TempRoot, [StringComparison]::OrdinalIgnoreCase) -or
       (Get-Item -LiteralPath $FullPath).PSIsContainer) {
@@ -119,10 +126,10 @@ try {
   $InstallerArguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/TOKENFILE=`"$FullTokenPath`"", "/RESULTFILE=`"$ResultPath`"")
   $Process = Start-Process -FilePath $InstallerPath -ArgumentList $InstallerArguments -Wait -PassThru
   $InstallerResult = if (Test-Path -LiteralPath $ResultPath) { (Get-Content -LiteralPath $ResultPath -Raw).Trim() } else { '' }
+  if ($InstallerResult -match '^(invalid_installation_token|installation_token_expired|installation_token_used|installation_token_file_insecure|api_key_invalid|invalid_session|account_suspended|workbuddy_config_ambiguous|workbuddy_config_not_found|workbuddy_config_invalid|workbuddy_config_self_check_failed|installation_exchange_unavailable)$') {
+    throw $InstallerResult
+  }
   if ($Process.ExitCode -ne 0) {
-    if ($InstallerResult -match '^(invalid_installation_token|installation_token_expired|installation_token_used|installation_token_file_insecure|api_key_invalid|invalid_session|account_suspended|workbuddy_config_ambiguous|workbuddy_config_not_found|workbuddy_config_invalid|workbuddy_config_self_check_failed|installation_exchange_unavailable)$') {
-      throw $InstallerResult
-    }
     throw "installation_failed: installer exit code $($Process.ExitCode)"
   }
   if ($InstallerResult -ne 'installed') { throw 'installation_failed: missing installer result' }

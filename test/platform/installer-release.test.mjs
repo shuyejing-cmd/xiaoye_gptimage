@@ -4,6 +4,7 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { buildReleaseManifest } from "../../installer/release-manifest.mjs";
 
 test("release manifest uses the stable public contract", () => {
@@ -53,6 +54,7 @@ test("bootstrap verifies transport, digest, optional signature, and cleanup befo
   assert.match(source, /\[Parameter\(Mandatory=\$true\)\]\[string\]\$ManifestUrl/);
   assert.doesNotMatch(source, /xiaoyeai\.cn\/install/);
   assert.match(source, /if \(\$Manifest\.signed\)/);
+  assert.ok(source.indexOf("$InstallerResult -match") < source.indexOf("$Process.ExitCode -ne 0"), "precise installer errors must be handled before the process exit code");
 });
 
 test("bootstrap never deletes a rejected token path outside the user temp directory", { skip: process.platform !== "win32" }, async () => {
@@ -71,10 +73,20 @@ test("bootstrap never deletes a rejected token path outside the user temp direct
   }
 });
 
+test("bootstrap maps a missing token file before any download", { skip: process.platform !== "win32" }, async () => {
+  const missing = join(tmpdir(), `wb-missing-bootstrap-token-${crypto.randomUUID()}.txt`);
+  await assert.rejects(promisify(execFile)("powershell.exe", [
+    "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "installer/workbuddy-image-mcp-bootstrap.ps1",
+    "-TokenFile", missing,
+    "-ManifestUrl", "https://example.test/workbuddy-image-mcp-1.2.3.json"
+  ], { windowsHide: true }), (error) => `${error.stdout || ""}${error.stderr || ""}`.includes("installation_token_file_insecure"));
+});
+
 test("unsigned installer builds stage all three GitHub release assets without website publishing", async () => {
   const source = await readFile("installer/build-installer.ps1", "utf8");
   assert.match(source, /WORKBUDDY_RELEASE_REPOSITORY/);
-  assert.match(source, /IsNullOrWhiteSpace\(\$PrimaryBaseUrl\).*\$PrimaryBaseUrl = \$FallbackBaseUrl/s);
+  assert.match(source, /WORKBUDDY_RELEASE_ROOT_URL/);
+  assert.match(source, /v\$Version/);
   assert.match(source, /WorkBuddy-Image-MCP-Setup-\$Version\.exe/);
   assert.match(source, /workbuddy-image-mcp-\$Version\.json/);
   assert.match(source, /workbuddy-image-mcp\.ps1/);
@@ -85,14 +97,25 @@ test("unsigned installer builds stage all three GitHub release assets without we
   assert.match(source, /--signed=\$Signed/);
 });
 
-test("GitHub Actions publishes one validated v1.2.2 backup release atomically", async () => {
-  const source = await readFile(".github/workflows/release.yml", "utf8");
-  assert.match(source, /v1\.2\.2/);
+test("GitHub Actions publishes one validated v1.2.3 backup release atomically", async () => {
+  const [source, smoke] = await Promise.all([
+    readFile(".github/workflows/release.yml", "utf8"),
+    readFile("installer/smoke-installer.ps1", "utf8")
+  ]);
+  assert.match(source, /v1\.2\.3/);
+  assert.match(source, /WORKBUDDY_RELEASE_ROOT_URL/);
+  assert.match(source, /WORKBUDDY_RELEASE_ROOT_URL is required/);
+  assert.match(source, /Smoke packaged bridge/);
+  assert.match(source, /Smoke installer initialization/);
+  assert.match(smoke, /installation_token_file_insecure/);
+  assert.match(smoke, /\/GROUP=/);
+  assert.doesNotMatch(smoke, /StartsWith\(\$SmokeRoot/);
+  assert.doesNotMatch(smoke, /WorkBuddy \* MCP/);
   assert.match(source, /node-version:\s*22/);
   assert.match(source, /npm test/);
   assert.match(source, /npm run web:build/);
   assert.match(source, /installer:build/);
-  for (const name of ["workbuddy-image-mcp.ps1", "workbuddy-image-mcp-1.2.2.json", "WorkBuddy-Image-MCP-Setup-1.2.2.exe"]) assert.match(source, new RegExp(name.replaceAll(".", "\\.")));
+  for (const name of ["workbuddy-image-mcp.ps1", "workbuddy-image-mcp-1.2.3.json", "WorkBuddy-Image-MCP-Setup-1.2.3.exe"]) assert.match(source, new RegExp(name.replaceAll(".", "\\.")));
   assert.match(source, /--draft/);
   assert.match(source, /release delete/);
   assert.match(source, /release edit[^\n]+--draft=false/);
@@ -115,7 +138,7 @@ test("release version and fixed publisher stay synchronized across artifacts", a
     app: app.match(/installerVersion = "([^"]+)"/)?.[1],
     manager: manager.match(/clientInfo: \{ name: "workbuddy-installer-doctor", version: "([^"]+)"/)?.[1]
   };
-  assert.deepEqual(new Set(Object.values(values)), new Set(["1.2.2"]));
+  assert.deepEqual(new Set(Object.values(values)), new Set(["1.2.3"]));
   const publishers = {
     bootstrap: bootstrap.match(/\$ExpectedPublisher = '([^']+)'/)?.[1],
     build: build.match(/\$ExpectedPublisher = '([^']+)'/)?.[1]

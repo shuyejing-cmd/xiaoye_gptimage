@@ -3,7 +3,7 @@ name: Release WorkBuddy Image MCP
 on:
   push:
     tags:
-      - v1.2.2
+      - v1.2.3
 
 permissions:
   contents: write
@@ -28,15 +28,40 @@ jobs:
         shell: powershell
         env:
           WORKBUDDY_RELEASE_REPOSITORY: ${{ github.repository }}
-          WORKBUDDY_RELEASE_BASE_URL: ${{ vars.WORKBUDDY_RELEASE_BASE_URL }}
-        run: npm run installer:build
+          WORKBUDDY_RELEASE_ROOT_URL: ${{ vars.WORKBUDDY_RELEASE_ROOT_URL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WORKBUDDY_RELEASE_ROOT_URL)) { throw 'WORKBUDDY_RELEASE_ROOT_URL is required.' }
+          npm run installer:build
+      - name: Smoke packaged bridge
+        shell: powershell
+        run: |
+          $probe = @'
+          import { probeMcpEntry } from "./installer/config-manager.mjs";
+          const healthy = await probeMcpEntry({
+            entry: {
+              command: "installer/stage/runtime/node.exe",
+              args: ["installer/stage/app/src/index.mjs"],
+              env: {
+                IMAGE_GATEWAY_URL: "https://xiaoyeai.cn",
+                IMAGE_API_KEY: "wb_live_release_smoke",
+                ALLOWED_IMAGE_ROOTS: ""
+              }
+            }
+          });
+          if (!healthy) throw new Error("Packaged bridge MCP handshake or tool list failed.");
+          '@
+          $probe | node --input-type=module
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged bridge smoke test failed.' }
+      - name: Smoke installer initialization
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File installer/smoke-installer.ps1 -InstallerPath installer/output/WorkBuddy-Image-MCP-Setup-1.2.3.exe -SmokeRoot "$env:RUNNER_TEMP/workbuddy-installer-smoke"
       - name: Validate release assets
         shell: powershell
         run: |
           $assets = @(
             'installer/output/workbuddy-image-mcp.ps1',
-            'installer/output/workbuddy-image-mcp-1.2.2.json',
-            'installer/output/WorkBuddy-Image-MCP-Setup-1.2.2.exe'
+            'installer/output/workbuddy-image-mcp-1.2.3.json',
+            'installer/output/WorkBuddy-Image-MCP-Setup-1.2.3.exe'
           )
           foreach ($asset in $assets) {
             if (-not (Test-Path -LiteralPath $asset) -or (Get-Item -LiteralPath $asset).Length -le 0) {
@@ -45,7 +70,7 @@ jobs:
           }
           $manifest = Get-Content -LiteralPath $assets[1] -Raw | ConvertFrom-Json
           $actual = (Get-FileHash -LiteralPath $assets[2] -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($manifest.version -ne '1.2.2' -or $manifest.sha256 -cne $actual) { throw 'Release manifest does not match the installer.' }
+          if ($manifest.version -ne '1.2.3' -or $manifest.sha256 -cne $actual) { throw 'Release manifest does not match the installer.' }
       - name: Publish complete GitHub Release
         shell: powershell
         env:
@@ -58,10 +83,10 @@ jobs:
             $created = $true
             gh release upload $tag `
               'installer/output/workbuddy-image-mcp.ps1' `
-              'installer/output/workbuddy-image-mcp-1.2.2.json' `
-              'installer/output/WorkBuddy-Image-MCP-Setup-1.2.2.exe'
+              'installer/output/workbuddy-image-mcp-1.2.3.json' `
+              'installer/output/WorkBuddy-Image-MCP-Setup-1.2.3.exe'
             $names = @(gh release view $tag --json assets --jq '.assets[].name')
-            $expected = @('workbuddy-image-mcp.ps1', 'workbuddy-image-mcp-1.2.2.json', 'WorkBuddy-Image-MCP-Setup-1.2.2.exe')
+            $expected = @('workbuddy-image-mcp.ps1', 'workbuddy-image-mcp-1.2.3.json', 'WorkBuddy-Image-MCP-Setup-1.2.3.exe')
             if (@(Compare-Object $expected $names).Count -ne 0) { throw 'GitHub Release asset set is incomplete.' }
             gh release edit $tag --draft=false
           } catch {

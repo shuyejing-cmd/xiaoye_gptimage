@@ -44,7 +44,7 @@ export function buildGitHubReleaseAssets({ repository, version }) {
 async function download(fetchImpl, url, { minimumBytes = 1, maximumBytes = MAX_ASSET_BYTES } = {}) {
   const response = await fetchImpl(url, {
     redirect: "follow",
-    headers: { accept: "application/octet-stream", "user-agent": "workbuddy-commercial-platform/1.2.2" },
+    headers: { accept: "application/octet-stream", "user-agent": "workbuddy-commercial-platform/1.2.3" },
     signal: AbortSignal.timeout(RELEASE_CHECK_TIMEOUT_MS)
   });
   if (!response?.ok) throw new Error("release_asset_unavailable");
@@ -59,7 +59,7 @@ async function verifyInstallerHead(fetchImpl, url, { minimumBytes }) {
   const response = await fetchImpl(url, {
     method: "HEAD",
     redirect: "follow",
-    headers: { "user-agent": "workbuddy-commercial-platform/1.2.2" },
+    headers: { "user-agent": "workbuddy-commercial-platform/1.2.3" },
     signal: AbortSignal.timeout(RELEASE_CHECK_TIMEOUT_MS)
   });
   if (!response?.ok) throw new Error("release_asset_unavailable");

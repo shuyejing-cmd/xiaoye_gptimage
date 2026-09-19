@@ -2,10 +2,10 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $StageDir = Join-Path $PSScriptRoot 'stage'
 $OutputDir = Join-Path $PSScriptRoot 'output'
-$Version = '1.2.2'
+$Version = '1.2.3'
 $ExpectedPublisher = 'CN=Xiaoye AI'
 $Repository = [string]$env:WORKBUDDY_RELEASE_REPOSITORY
-$PrimaryBaseUrl = [string]$env:WORKBUDDY_RELEASE_BASE_URL
+$ReleaseRootUrl = [string]$env:WORKBUDDY_RELEASE_ROOT_URL
 
 function Get-Sha256Hex([string]$Path) {
   $Stream = [System.IO.File]::OpenRead($Path)
@@ -21,9 +21,13 @@ function Get-Sha256Hex([string]$Path) {
 if (-not $StageDir.StartsWith($PSScriptRoot) -or -not $OutputDir.StartsWith($PSScriptRoot)) { throw 'Installer paths escaped the installer directory.' }
 if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'WORKBUDDY_RELEASE_REPOSITORY must use owner/repository.' }
 $FallbackBaseUrl = "https://github.com/$Repository/releases/download/v$Version"
-if ([string]::IsNullOrWhiteSpace($PrimaryBaseUrl)) { $PrimaryBaseUrl = $FallbackBaseUrl }
-$PrimaryBaseUrl = $PrimaryBaseUrl.TrimEnd('/')
-if ($PrimaryBaseUrl -notmatch '^https://') { throw 'WORKBUDDY_RELEASE_BASE_URL must use HTTPS.' }
+if ([string]::IsNullOrWhiteSpace($ReleaseRootUrl)) {
+  $PrimaryBaseUrl = $FallbackBaseUrl
+} else {
+  $ReleaseRootUrl = $ReleaseRootUrl.TrimEnd('/')
+  if ($ReleaseRootUrl -notmatch '^https://') { throw 'WORKBUDDY_RELEASE_ROOT_URL must use HTTPS.' }
+  $PrimaryBaseUrl = "$ReleaseRootUrl/v$Version"
+}
 $Iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
 if (-not $Iscc) { throw 'Inno Setup iscc.exe was not found. Install Inno Setup 6 and retry.' }
 
