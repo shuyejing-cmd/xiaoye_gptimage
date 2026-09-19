@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $StageDir = Join-Path $PSScriptRoot 'stage'
 $OutputDir = Join-Path $PSScriptRoot 'output'
-$Version = '1.2.1'
+$Version = '1.2.2'
 $ExpectedPublisher = 'CN=Xiaoye AI'
 $Repository = [string]$env:WORKBUDDY_RELEASE_REPOSITORY
 $PrimaryBaseUrl = [string]$env:WORKBUDDY_RELEASE_BASE_URL
