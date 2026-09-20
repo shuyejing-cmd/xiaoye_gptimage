@@ -28,6 +28,25 @@ test("allows the commercial worker gpt.ge image model to be configured", () => {
   assert.equal(loadPlatformConfig({ ...baseEnv, GPT_GE_IMAGE_MODEL: "future-image-model" }).gptGe.model, "future-image-model");
 });
 
+test("requires and validates the APIMart proxy when APIMart is selected", () => {
+  const env = {
+    ...baseEnv,
+    IMAGE_PROVIDER: "apimart",
+    APIMART_API_KEY: "apimart-key",
+    APIMART_PROXY_URL: "http://mihomo:7890",
+    APIMART_IMAGE_MODEL: "gpt-image-2.5-flare"
+  };
+  const config = loadPlatformConfig(env);
+  assert.deepEqual(config.apimart, {
+    apiKey: "apimart-key",
+    baseUrl: "https://api.apimart.ai/v1",
+    proxyUrl: "http://mihomo:7890/",
+    model: "gpt-image-2.5-flare"
+  });
+  assert.throws(() => loadPlatformConfig({ ...env, APIMART_PROXY_URL: "" }), (error) => error.code === "missing_config");
+  assert.throws(() => loadPlatformConfig({ ...env, APIMART_PROXY_URL: "socks5://mihomo:7890" }), (error) => error.code === "invalid_config");
+});
+
 test("local development can explicitly disable secure cookies", () => {
   assert.equal(loadPlatformConfig({ ...baseEnv, COOKIE_SECURE: "false" }).cookieSecure, false);
 });

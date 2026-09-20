@@ -10,11 +10,21 @@ function encryptionKey(value, name) {
   return buffer;
 }
 
+function httpProxyUrl(value, name) {
+  let url;
+  try { url = new URL(value); } catch { /* validated below */ }
+  if (!url || url.protocol !== "http:" || url.username || url.password || url.search || url.hash) {
+    throw new AppError({ code: "invalid_config", message: `${name} must be a plain HTTP URL`, httpStatus: 500 });
+  }
+  return url.href;
+}
+
 export function loadPlatformConfig(env = process.env) {
   requireValues(env, ["DATABASE_URL", "AUTH_PEPPER", "API_KEY_PEPPER", "INSTALLATION_TOKEN_PEPPER", "API_KEY_ENCRYPTION_KEY", "PAYLOAD_ENCRYPTION_KEY", "COS_SECRET_ID", "COS_SECRET_KEY", "COS_BUCKET", "COS_REGION", "SMTP_HOST", "SMTP_FROM"]);
   const imageProvider = env.IMAGE_PROVIDER || "gpt_ge";
   if (!new Set(["gpt_ge", "apimart"]).has(imageProvider)) throw new AppError({ code: "invalid_config", message: "IMAGE_PROVIDER must be gpt_ge or apimart", httpStatus: 500 });
   requireValues(env, [imageProvider === "gpt_ge" ? "GPT_GE_API_KEY" : "APIMART_API_KEY"]);
+  if (imageProvider === "apimart") requireValues(env, ["APIMART_PROXY_URL"]);
   const publicOrigin = env.PUBLIC_ORIGIN || "https://xiaoyeai.cn";
   const installerVersion = env.WORKBUDDY_INSTALLER_VERSION || "1.2.3";
   const releaseRepository = String(env.WORKBUDDY_RELEASE_REPOSITORY || "").trim() || null;
@@ -51,7 +61,12 @@ export function loadPlatformConfig(env = process.env) {
     port: Number(env.PORT || 3000),
     cos: { secretId: env.COS_SECRET_ID, secretKey: env.COS_SECRET_KEY, bucket: env.COS_BUCKET, region: env.COS_REGION, prefix: env.COS_PREFIX || "private/workbuddy-images" },
     gptGe: { apiKey: env.GPT_GE_API_KEY, baseUrl: env.GPT_GE_BASE_URL || "https://api.gpt.ge/v1", model: env.GPT_GE_IMAGE_MODEL || "gpt-image-2.5-sunburst" },
-    apimart: { apiKey: env.APIMART_API_KEY, baseUrl: env.APIMART_BASE_URL || "https://api.apimart.ai/v1" },
+    apimart: {
+      apiKey: env.APIMART_API_KEY,
+      baseUrl: env.APIMART_BASE_URL || "https://api.apimart.ai/v1",
+      proxyUrl: env.APIMART_PROXY_URL ? httpProxyUrl(env.APIMART_PROXY_URL, "APIMART_PROXY_URL") : null,
+      model: env.APIMART_IMAGE_MODEL || "gpt-image-2.5-sunburst"
+    },
     smtp: { host: env.SMTP_HOST, port: Number(env.SMTP_PORT || 465), secure: env.SMTP_SECURE !== "false", user: env.SMTP_USER, pass: env.SMTP_PASS, from: env.SMTP_FROM },
     adminNotificationEmail: env.ADMIN_NOTIFICATION_EMAIL || env.SMTP_FROM,
     legacyGatewayToken: env.MCP_GATEWAY_TOKEN || null,

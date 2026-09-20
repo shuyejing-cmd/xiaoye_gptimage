@@ -11,6 +11,7 @@ ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY src ./src
+COPY ops ./ops
 COPY --from=build /app/web/dist ./web/dist
 RUN mkdir -p /app/data /app/web/dist/downloads && chown -R node:node /app
 USER node
