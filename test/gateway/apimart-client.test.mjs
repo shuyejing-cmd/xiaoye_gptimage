@@ -36,3 +36,48 @@ test("apimart preserves its provider-protocol error for a malformed success resp
     (error) => error.code === "provider_protocol_error" && error.httpStatus === 502
   );
 });
+
+test("APIMart sends only documented 2.5 fields and uses operation-specific timeouts", async () => {
+  const calls = [];
+  const timeouts = [];
+  const client = createApimartClient({
+    apiKey: "key",
+    model: "gpt-image-2.5-sunburst",
+    signalFactory: (milliseconds) => { timeouts.push(milliseconds); return AbortSignal.abort(); },
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init, body: init.body && JSON.parse(init.body) });
+      if (url.endsWith("/models")) return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      if (url.includes("/tasks/")) return new Response(JSON.stringify({ data: { status: "pending" } }), { status: 200 });
+      return new Response(JSON.stringify({ data: [{ task_id: "task-25" }] }), { status: 200 });
+    }
+  });
+  await client.healthCheck();
+  await client.submit({
+    prompt: "cat", size: "1:1", resolution: "4k", quality: "high", output_format: "png", n: 1,
+    referenceImageUrls: ["https://cos.example/ref.png"], requestId: "must-not-leak", userId: 99
+  });
+  await client.getTask("task-25");
+  assert.deepEqual(timeouts, [10_000, 30_000, 15_000]);
+  assert.deepEqual(calls[1].body, {
+    model: "gpt-image-2.5-sunburst",
+    prompt: "cat",
+    size: "1:1",
+    resolution: "4k",
+    quality: "high",
+    output_format: "png",
+    n: 1,
+    image_urls: ["https://cos.example/ref.png"]
+  });
+});
+
+test("APIMart downloads results through its injected transport with a 120 second budget", async () => {
+  const calls = [];
+  const png = Buffer.from("89504e470d0a1a0a00000000", "hex");
+  const client = createApimartClient({
+    apiKey: "key",
+    fetchImpl: async (url, init) => { calls.push({ url: String(url), init }); return new Response(png, { status: 200 }); }
+  });
+  const image = await client.downloadImage("https://upload.apimart.ai/result.png");
+  assert.equal(image.mimeType, "image/png");
+  assert.equal(calls[0].init.signal.constructor.name, "AbortSignal");
+});

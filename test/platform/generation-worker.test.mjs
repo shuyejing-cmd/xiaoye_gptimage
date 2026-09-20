@@ -118,3 +118,40 @@ test("a database failure after provider acceptance keeps the charge held", async
   assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 1 });
   await pool.end();
 });
+
+test("an unavailable asynchronous provider defers the job before submitting without changing the hold", async () => {
+  let submitCalls = 0;
+  const provider = {
+    mode: "asynchronous",
+    healthCheck: async () => { throw new AppError({ code: "provider_unreachable", message: "offline", httpStatus: 503, retryable: true }); },
+    submit: async () => { submitCalls += 1; return { taskId: "must-not-exist" }; }
+  };
+  const { pool, userId, jobs, worker } = await setup(provider);
+  const job = await jobs.enqueue({ userId, idempotencyKey: "deferred-preflight", provider: "apimart", request: { prompt: "cat" } });
+  const result = await worker.runNext();
+  const saved = await jobs.getForUser({ userId, requestId: job.requestId });
+  assert.equal(result.state, "queued");
+  assert.equal(saved.state, "queued");
+  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 1 });
+  assert.equal(submitCalls, 0);
+  await pool.end();
+});
+
+test("an asynchronous provider receives 30 minute COS URLs for all reference images", async () => {
+  const signed = [];
+  let submission;
+  const provider = {
+    mode: "asynchronous",
+    healthCheck: async () => true,
+    submit: async (value) => { submission = value; return { taskId: "upstream-with-refs" }; }
+  };
+  const inputStore = {
+    getSignedReference: async (key, expires) => { signed.push([key, expires]); return `https://cos.example/${key}?signature=secret`; }
+  };
+  const { pool, userId, jobs, worker } = await setup(provider, { inputStore });
+  await jobs.enqueue({ userId, idempotencyKey: "async-refs", provider: "apimart", request: { prompt: "edit" }, referenceObjectKeys: ["ref-a", "ref-b"] });
+  await worker.runNext();
+  assert.deepEqual(signed, [["ref-a", 1800], ["ref-b", 1800]]);
+  assert.deepEqual(submission.referenceImageUrls, ["https://cos.example/ref-a?signature=secret", "https://cos.example/ref-b?signature=secret"]);
+  await pool.end();
+});

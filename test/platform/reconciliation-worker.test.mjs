@@ -13,7 +13,8 @@ async function setup(now = new Date("2026-09-13T12:00:00Z")) {
   await runMigrations(pool);
   const user = (await pool.query("insert into users(email,status,role) values('reconcile@example.com','active','user') returning id")).rows[0];
   await pool.query("insert into wallets(user_id,available_credits,held_credits) values($1,5,0)", [user.id]);
-  const jobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: Buffer.alloc(32, 7) }), requestIdFactory: () => "reconcile-1", now: () => now });
+  let requestSequence = 0;
+  const jobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: Buffer.alloc(32, 7) }), requestIdFactory: () => `reconcile-${++requestSequence}`, now: () => now });
   return { pool, userId: user.id, jobs };
 }
 
@@ -44,6 +45,49 @@ test("reconciliation polls an existing upstream task and never resubmits it", as
   await worker.runOnce();
   assert.equal(getCalls, 1);
   assert.equal((await jobs.getForUser({ userId, requestId: job.requestId })).state, "succeeded");
+  await pool.end();
+});
+
+test("reconciliation downloads APIMart output with its provider transport before storing it", async () => {
+  const { pool, userId, jobs } = await setup();
+  const job = await jobs.enqueue({ userId, idempotencyKey: "proxied-output", provider: "apimart", request: { prompt: "cat" } });
+  await jobs.claimNext();
+  await jobs.markProviderPending({ requestId: job.requestId, upstreamTaskId: "upstream-proxy" });
+  let downloadedUrl;
+  let storedBuffer;
+  const provider = {
+    getTask: async () => ({ status: "completed", imageUrl: "https://cdn.apimart.ai/output.png" }),
+    downloadImage: async (url) => { downloadedUrl = url; return { imageBuffer: Buffer.from("png"), mimeType: "image/png" }; }
+  };
+  const outputStore = {
+    putGenerated: async ({ buffer, requestId, mimeType }) => { storedBuffer = buffer; return { objectKey: `generated/${requestId}.png`, mimeType }; }
+  };
+  const worker = createReconciliationWorker({ jobs, providers: { apimart: provider }, outputStore });
+  await worker.runOnce();
+  assert.equal(downloadedUrl, "https://cdn.apimart.ai/output.png");
+  assert.equal(storedBuffer.toString(), "png");
+  assert.equal((await jobs.getForUser({ userId, requestId: job.requestId })).state, "succeeded");
+  await pool.end();
+});
+
+test("reconciliation selects the provider recorded on each historical job", async () => {
+  const { pool, userId, jobs } = await setup();
+  const apimartJob = await jobs.enqueue({ userId, idempotencyKey: "historical-apimart", provider: "apimart", request: { prompt: "cat" } });
+  await jobs.claimNext();
+  await jobs.markProviderPending({ requestId: apimartJob.requestId, upstreamTaskId: "apimart-task" });
+  await pool.query("update generation_jobs set state='failed' where request_id=$1", [apimartJob.requestId]);
+  await pool.query("update wallets set available_credits=5,held_credits=0 where user_id=$1", [userId]);
+  const gptJob = await jobs.enqueue({ userId, idempotencyKey: "historical-gpt", provider: "gpt_ge", request: { prompt: "dog" } });
+  await jobs.claimNext();
+  await jobs.markProviderPending({ requestId: gptJob.requestId, upstreamTaskId: "gpt-task" });
+  await pool.query("update generation_jobs set state='provider_pending' where request_id=$1", [apimartJob.requestId]);
+  const calls = [];
+  const providers = {
+    apimart: { getTask: async (id) => { calls.push(["apimart", id]); return { status: "pending" }; } },
+    gpt_ge: { getTask: async (id) => { calls.push(["gpt_ge", id]); return { status: "pending" }; } }
+  };
+  await createReconciliationWorker({ jobs, providers, outputStore: {} }).runOnce();
+  assert.deepEqual(calls.sort(), [["apimart", "apimart-task"], ["gpt_ge", "gpt-task"]]);
   await pool.end();
 });
 

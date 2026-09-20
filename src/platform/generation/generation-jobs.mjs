@@ -66,6 +66,11 @@ export function createGenerationJobs({ pool, cipher, requestIdFactory, now = () 
       return pool.query("update generation_jobs set state='provider_pending',upstream_task_id=$2,error_code=null,unknown_since=null,updated_at=$3 where request_id=$1 and state in ('submitting','unknown')", [requestId, upstreamTaskId, now()]);
     },
 
+    defer({ requestId, errorCode = "provider_unavailable", delayMs = 30_000 }) {
+      const deferredUntil = new Date(now().getTime() + delayMs);
+      return pool.query("update generation_jobs set state='queued',available_at=$2,claimed_at=null,error_code=$3,updated_at=$4 where request_id=$1 and state='submitting'", [requestId, deferredUntil, errorCode, now()]);
+    },
+
     claimNext() {
       return withTransaction(pool, async (client) => {
         const result = await client.query("update generation_jobs set state='submitting',claimed_at=$1,updated_at=$1 where id=(select id from generation_jobs where state='queued' and available_at<=$1 order by created_at,id limit 1) and state='queued' returning *", [now()]);

@@ -9,7 +9,7 @@
 - `src/index.mjs`：安装在用户电脑上的 stdio MCP bridge，只读取 `ALLOWED_IMAGE_ROOTS` 内的参考图。
 - `web/`：React/Vite 用户网站与管理后台。
 - `installer/`：包含 Node runtime 的 Inno Setup Windows 安装器。
-- `ops/`：PostgreSQL 加密备份和恢复演练脚本。
+- `ops/`：Mihomo 私密配置生成、PostgreSQL 加密备份和恢复演练脚本。
 
 PostgreSQL 是账户、钱包、账本、订单和任务状态的唯一事实来源。旧 SQLite 文件仅保留给旧 `/mcp` gateway，不迁移为已计费历史。
 
@@ -55,6 +55,20 @@ PUBLIC_REGISTRATION_ENABLED=false
 
 ## Docker Compose 部署
 
+APIMart 是生产主供应商时，订阅地址、控制密钥和 API Key 只放在服务器 `.env`：
+
+```dotenv
+IMAGE_PROVIDER=apimart
+APIMART_API_KEY=replace-me
+APIMART_BASE_URL=https://api.apimart.ai/v1
+APIMART_PROXY_URL=http://mihomo:7890
+APIMART_IMAGE_MODEL=gpt-image-2.5-sunburst
+MIHOMO_SUBSCRIPTION_URL=https://subscription.example/secret
+MIHOMO_CONTROLLER_SECRET=replace-with-at-least-32-random-characters
+```
+
+Compose 会把 Mihomo 私密配置写到独立卷：订阅每 6 小时刷新、节点每 60 秒检查，并由 `fallback` 自动切换。只有 `*.apimart.ai` 走代理；COS、SMTP、PostgreSQL 和 GPT.Ge 保持直连。代理端口不映射宿主机，控制接口和 MetaCubeXD 仅监听 `127.0.0.1:9090`、`127.0.0.1:9080`。
+
 ```bash
 cp .env.example .env
 docker compose up -d --build
@@ -62,6 +76,14 @@ docker compose ps
 curl -fsS https://your-domain.example/healthz
 curl -fsS https://your-domain.example/readyz
 ```
+
+在本机用 SSH 转发访问面板：
+
+```powershell
+ssh -L 9080:127.0.0.1:9080 -L 9090:127.0.0.1:9090 ubuntu@118.25.152.249
+```
+
+打开 `http://127.0.0.1:9080`，控制器填写 `http://127.0.0.1:9090` 和 `.env` 中的控制密钥。代理暂时不可用时，网站、登录和充值仍正常；新任务在冻结额度前返回 503，worker 已领取但尚未提交的任务会延后，不会自动切换 GPT.Ge。人工回滚只需将 `IMAGE_PROVIDER=gpt_ge` 后重建 API 和 worker，历史任务仍按数据库记录的原供应商对账。
 
 `/healthz` 只表示进程存活；`/readyz` 会检查 PostgreSQL 和钱包不变量。API 在钱包异常或未知任务积压达到门限时暂停接收新生成，但查询和后台复核仍可使用。
 
@@ -77,7 +99,7 @@ curl -fsS https://your-domain.example/readyz
 最简单的接入只有三步：
 
 1. 在网站完成邮箱验证，并在“MCP Key”页面创建一个 Key。
-2. 点击“复制安装提示词”，把整段内容发送给 WorkBuddy；提示词只含 10 分钟有效、只能使用一次的安装码，不含长期 Key。
+2. 点击“复制安装提示词”，把整段内容发送给 WorkBuddy；提示词只含 30 分钟有效、只能使用一次的安装码，不含长期 Key。
 3. WorkBuddy 说明操作后，允许一次本机命令执行。安装成功后开启 `xiaoye-image`；列表没有刷新时重启 WorkBuddy。
 
 自动流程优先从腾讯云下载固定版本的 bootstrap 和安装器，失败时改用 GitHub 同版本备份，并校验 HTTPS、文件大小和 SHA-256；带签名的后续版本还会校验 Authenticode 与精确发布者。安装器备份 WorkBuddy 配置、合并 `xiaoye-image` 并调用 `/v1/account/balance` 自检。只有新版自检成功后，才会移除指向 `xiaoyeai.cn` 的自有旧版 `image-bridge`；失败会恢复原配置。安装码通过当前用户临时文件传递，不进入 URL；长期 Key 不进入聊天、命令行或安装日志。
@@ -104,7 +126,7 @@ WorkBuddy 不能执行本机命令时，使用网站显示的腾讯云固定版�
 }
 ```
 
-`generate_image` 支持文生图以及 1–4 张 PNG/JPEG/WebP 参考图；单张最多 4 MiB，总顺序由 `reference_image_paths` 决定。APIMart 模式仍只支持一张参考图，多图会明确拒绝。
+`generate_image` 支持文生图以及 1–4 张 PNG/JPEG/WebP 参考图；单张最多 4 MiB，总顺序由 `reference_image_paths` 决定。分辨率支持 `auto`、`1k`、`2k`、`4k`，默认 `1k`，当前每次成功交付统一扣 1 额度。
 
 ## 安装器发布
 

@@ -11,7 +11,7 @@ import { createInstallationTokenService } from "../../src/platform/installations
 import { createRateLimiter } from "../../src/platform/http/rate-limiter.mjs";
 import { createPlatformApp } from "../../src/platform/http/platform-app.mjs";
 
-async function setup({ publicRegistrationEnabled = true, cookieSecure = true, releaseService = { getStatus: async () => ({ ready: true, version: "1.2.0", bootstrap_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp.ps1", manifest_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp-1.2.0.json", installer_url: "https://github.com/owner/repository/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe" }) } } = {}) {
+async function setup({ publicRegistrationEnabled = true, cookieSecure = true, generationAdmissionCheck = async () => true, providerStatus = () => null, releaseService = { getStatus: async () => ({ ready: true, version: "1.2.0", bootstrap_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp.ps1", manifest_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp-1.2.0.json", installer_url: "https://github.com/owner/repository/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe" }) } } = {}) {
   const memory = newDb({ autoCreateForeignKeyIndices: true, noAstCoverageCheck: true });
   const { Pool } = memory.adapters.createPg();
   const pool = new Pool();
@@ -26,7 +26,7 @@ async function setup({ publicRegistrationEnabled = true, cookieSecure = true, re
   const walletService = createWalletService({ pool });
   const generationJobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: Buffer.alloc(32, 4) }), requestIdFactory: () => `api-${++requestId}` });
   const installationTokenService = createInstallationTokenService({ pool, pepper: "installation-tokens", apiKeyService, randomBytes: () => Buffer.alloc(24, tokenSeed++) });
-  const app = createPlatformApp({ pool, authService, apiKeyService, installationTokenService, releaseService, walletService, generationJobs, rateLimiter: createRateLimiter({ pool }), temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) }, publicRegistrationEnabled, cookieSecure, publicOrigin: "https://xiaoyeai.cn", installerVersion: "1.2.0", readyCheck: async () => true });
+  const app = createPlatformApp({ pool, authService, apiKeyService, installationTokenService, releaseService, walletService, generationJobs, rateLimiter: createRateLimiter({ pool }), temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) }, publicRegistrationEnabled, cookieSecure, publicOrigin: "https://xiaoyeai.cn", installerVersion: "1.2.0", readyCheck: async () => true, generationAdmissionCheck, providerStatus });
   return { pool, app, sent };
 }
 
@@ -106,6 +106,18 @@ test("an authenticated owner can reload a complete key without cache storage", a
   assert.equal(listed.statusCode, 200);
   assert.equal(listed.headers["cache-control"], "no-store");
   assert.equal(listed.json().keys[0].key, created.json().key);
+  await app.close();
+  await pool.end();
+});
+
+test("provider outage rejects a generation before freezing credit", async () => {
+  const { pool, app, sent } = await setup({ generationAdmissionCheck: async () => false });
+  const owner = await login(app, sent, "paused@example.com", "paused-browser");
+  const key = (await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name: "Paused" } })).json().key;
+  const response = await app.inject({ method: "POST", url: "/v1/generations", headers: { authorization: `Bearer ${key}`, "idempotency-key": "paused-request" }, payload: { prompt: "cat" } });
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual((await pool.query("select available_credits,held_credits from wallets where user_id=$1", [owner.body.user.id])).rows[0], { available_credits: 5, held_credits: 0 });
+  assert.equal((await pool.query("select count(*)::int as count from generation_jobs")).rows[0].count, 0);
   await app.close();
   await pool.end();
 });
@@ -265,6 +277,19 @@ test("website and admin APIs enforce sessions, roles, and order isolation", asyn
   const rejectedKey = await app.inject({ method: "GET", url: "/v1/account/balance", headers: { authorization: `Bearer ${keyTwo}` } });
   assert.equal(rejectedKey.statusCode, 401);
   assert.equal((await pool.query("select reason from audit_events where action='change_user_status' and target_id=$1", [String(two.body.user.id)])).rows[0].reason, "自动化冻结测试");
+  await app.close();
+  await pool.end();
+});
+
+test("admin metrics expose only the current provider health summary", async () => {
+  const providerHealth = { provider: "apimart", available: false, checked_at: "2026-09-20T00:00:00.000Z" };
+  const { pool, app, sent } = await setup({ providerStatus: () => providerHealth });
+  const admin = await login(app, sent, "metrics-admin@example.com", "metrics-admin-browser");
+  await pool.query("update users set role='admin' where id=$1", [admin.body.user.id]);
+  const response = await app.inject({ method: "GET", url: "/api/admin/metrics", headers: { cookie: admin.cookie } });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json().provider_status, providerHealth);
+  assert.doesNotMatch(JSON.stringify(response.json()), /api[_-]?key|proxy_url|secret/i);
   await app.close();
   await pool.end();
 });

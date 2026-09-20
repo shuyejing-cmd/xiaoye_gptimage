@@ -24,7 +24,7 @@ export function loadPlatformConfig(env = process.env) {
   const imageProvider = env.IMAGE_PROVIDER || "gpt_ge";
   if (!new Set(["gpt_ge", "apimart"]).has(imageProvider)) throw new AppError({ code: "invalid_config", message: "IMAGE_PROVIDER must be gpt_ge or apimart", httpStatus: 500 });
   requireValues(env, [imageProvider === "gpt_ge" ? "GPT_GE_API_KEY" : "APIMART_API_KEY"]);
-  if (imageProvider === "apimart") requireValues(env, ["APIMART_PROXY_URL"]);
+  if (env.APIMART_API_KEY) requireValues(env, ["APIMART_PROXY_URL"]);
   const publicOrigin = env.PUBLIC_ORIGIN || "https://xiaoyeai.cn";
   const installerVersion = env.WORKBUDDY_INSTALLER_VERSION || "1.2.3";
   const releaseRepository = String(env.WORKBUDDY_RELEASE_REPOSITORY || "").trim() || null;

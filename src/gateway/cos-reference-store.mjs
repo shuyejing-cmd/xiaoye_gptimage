@@ -49,6 +49,7 @@ export function createReferenceStore({ secretId, secretKey, bucket, region, pref
       return { buffer: Buffer.from(result.Body), mimeType: result.headers?.["content-type"] || "application/octet-stream", fileName: key.split("/").at(-1) };
     },
     getSignedOutput: (key, expires = 600) => signedUrl(key, expires),
+    getSignedReference: (key, expires = 1800) => signedUrl(key, expires),
     remove: (key) => call("deleteObject", { Bucket: bucket, Region: region, Key: key })
   };
 }

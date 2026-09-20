@@ -13,9 +13,21 @@ export function createGenerationWorker({ jobs, provider, outputStore, inputStore
       const referenceObjectKeys = job.payload.referenceObjectKeys || [];
       try {
         if (provider.mode !== "synchronous") {
+          if (provider.healthCheck) {
+            try {
+              await provider.healthCheck();
+            } catch (error) {
+              await jobs.defer({ requestId: job.requestId, errorCode: error?.code || "provider_unavailable" });
+              return { requestId: job.requestId, state: "queued" };
+            }
+          }
+          const getSignedReference = inputStore?.getSignedReference || inputStore?.getSignedOutput;
+          const referenceImageUrls = referenceObjectKeys.length
+            ? await Promise.all(referenceObjectKeys.map((key) => getSignedReference.call(inputStore, key, 1800)))
+            : undefined;
           let submitted;
           try {
-            submitted = await provider.submit({ ...job.payload.request, requestId: job.requestId });
+            submitted = await provider.submit({ ...job.payload.request, referenceImageUrls });
           } catch (error) {
             if (!error?.retryable && error?.code !== "provider_protocol_error" && !ambiguousSubmissionCodes.has(error?.code)) throw error;
             await jobs.markUnknown({ requestId: job.requestId, errorCode: error?.code || "generation_submission_unknown" }).catch((markError) => logger.error?.({ event: "unknown_state_persist_failed", requestId: job.requestId, code: markError?.code || "database_error" }));

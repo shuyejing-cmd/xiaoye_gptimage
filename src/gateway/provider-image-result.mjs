@@ -2,7 +2,7 @@ import { lookup as lookupDns } from "node:dns/promises";
 import { isIP } from "node:net";
 import { AppError } from "../shared/errors.mjs";
 
-const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+const DEFAULT_MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 const PNG_SIGNATURE = Buffer.from("89504e470d0a1a0a", "hex");
 const JPEG_SIGNATURE = Buffer.from("ffd8ff", "hex");
@@ -14,24 +14,24 @@ function imageMimeType(buffer) {
   throw new AppError({ code: "provider_image_invalid", message: "provider result is not a supported image", httpStatus: 502 });
 }
 
-function asImage(buffer) {
+function asImage(buffer, maxImageBytes = DEFAULT_MAX_IMAGE_BYTES) {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new AppError({ code: "provider_image_invalid", message: "provider returned an empty image", httpStatus: 502 });
-  if (buffer.length > MAX_IMAGE_BYTES) throw new AppError({ code: "provider_image_too_large", message: "provider image exceeds the download limit", httpStatus: 502 });
+  if (buffer.length > maxImageBytes) throw new AppError({ code: "provider_image_too_large", message: "provider image exceeds the download limit", httpStatus: 502 });
   return { imageBuffer: buffer, mimeType: imageMimeType(buffer) };
 }
 
-function decodeBase64(value) {
+function decodeBase64(value, maxImageBytes) {
   const encoded = value.replace(/\s/g, "");
   if (!encoded || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 === 1) {
     throw new AppError({ code: "provider_image_invalid", message: "provider returned invalid image data", httpStatus: 502 });
   }
-  return asImage(Buffer.from(encoded, "base64"));
+  return asImage(Buffer.from(encoded, "base64"), maxImageBytes);
 }
 
-function decodeDataUrl(value) {
+function decodeDataUrl(value, maxImageBytes) {
   const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=\s]+)$/i.exec(value);
   if (!match) throw new AppError({ code: "provider_image_invalid", message: "provider returned invalid image data", httpStatus: 502 });
-  return decodeBase64(match[2]);
+  return decodeBase64(match[2], maxImageBytes);
 }
 
 function isPublicIpv4(address) {
@@ -77,9 +77,9 @@ async function validateUrl(value, dnsLookup) {
   return url;
 }
 
-async function readBody(response) {
+async function readBody(response, maxImageBytes) {
   const expectedSize = Number(response.headers.get("content-length"));
-  if (Number.isFinite(expectedSize) && expectedSize > MAX_IMAGE_BYTES) throw new AppError({ code: "provider_image_too_large", message: "provider image exceeds the download limit", httpStatus: 502 });
+  if (Number.isFinite(expectedSize) && expectedSize > maxImageBytes) throw new AppError({ code: "provider_image_too_large", message: "provider image exceeds the download limit", httpStatus: 502 });
   if (!response.body) return Buffer.alloc(0);
   const reader = response.body.getReader();
   const chunks = [];
@@ -89,7 +89,7 @@ async function readBody(response) {
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > MAX_IMAGE_BYTES) {
+      if (bytes > maxImageBytes) {
         await reader.cancel();
         throw new AppError({ code: "provider_image_too_large", message: "provider image exceeds the download limit", httpStatus: 502 });
       }
@@ -101,12 +101,12 @@ async function readBody(response) {
   return Buffer.concat(chunks, bytes);
 }
 
-async function downloadImage(value, { fetchImpl, dnsLookup }) {
+async function downloadImage(value, { fetchImpl, dnsLookup, timeoutMs, maxImageBytes }) {
   let url = await validateUrl(value, dnsLookup);
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
     let response;
     try {
-      response = await fetchImpl(url, { redirect: "manual", signal: AbortSignal.timeout(15000) });
+      response = await fetchImpl(url, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
     } catch (cause) {
       throw new AppError({ code: "provider_image_download_failed", message: "provider image could not be downloaded", httpStatus: 502, cause });
     }
@@ -117,7 +117,7 @@ async function downloadImage(value, { fetchImpl, dnsLookup }) {
       continue;
     }
     if (!response.ok) throw new AppError({ code: "provider_image_download_failed", message: "provider image download failed", httpStatus: 502 });
-    return asImage(await readBody(response));
+    return asImage(await readBody(response, maxImageBytes), maxImageBytes);
   }
   throw new AppError({ code: "provider_image_url_invalid", message: "provider returned too many image redirects", httpStatus: 502 });
 }
@@ -136,14 +136,19 @@ function protocolError(body) {
   return error;
 }
 
-export async function resolveProviderImage(body, { fetchImpl = fetch, dnsLookup = (host) => lookupDns(host, { all: true, verbatim: true }) } = {}) {
+export async function resolveProviderImage(body, {
+  fetchImpl = fetch,
+  dnsLookup = (host) => lookupDns(host, { all: true, verbatim: true }),
+  timeoutMs = 15_000,
+  maxImageBytes = DEFAULT_MAX_IMAGE_BYTES
+} = {}) {
   const item = Array.isArray(body?.data) ? body.data[0] : undefined;
   const candidates = [item?.b64_json, item?.url, item?.image_url, body?.image_url, item?.base64, item?.image_base64];
   for (const value of candidates) {
     if (typeof value !== "string" || !value.trim()) continue;
-    if (value.startsWith("data:")) return decodeDataUrl(value);
-    if (/^https?:\/\//i.test(value)) return downloadImage(value, { fetchImpl, dnsLookup });
-    return decodeBase64(value);
+    if (value.startsWith("data:")) return decodeDataUrl(value, maxImageBytes);
+    if (/^https?:\/\//i.test(value)) return downloadImage(value, { fetchImpl, dnsLookup, timeoutMs, maxImageBytes });
+    return decodeBase64(value, maxImageBytes);
   }
   throw protocolError(body);
 }

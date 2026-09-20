@@ -48,6 +48,7 @@ export function createPlatformApp({
   rateLimiter,
   readyCheck = async () => true,
   generationAdmissionCheck = async () => true,
+  providerStatus = () => null,
   publicRegistrationEnabled = false,
   cookieSecure = true,
   publicOrigin = "https://xiaoyeai.cn",
@@ -316,7 +317,8 @@ export function createPlatformApp({
       queue_oldest_wait_seconds: oldestQueued.rowCount ? Math.max(0, Math.round((Date.now() - new Date(oldestQueued.rows[0].created_at).getTime()) / 1000)) : 0,
       generation_success_rate_24h: terminalCount ? succeeded / terminalCount : null,
       provider_error_rate_24h: terminalCount ? providerFailures / terminalCount : null,
-      wallet_invariant_violations: Number(invalidWallets.rows[0].count)
+      wallet_invariant_violations: Number(invalidWallets.rows[0].count),
+      provider_status: providerStatus()
     };
   });
   app.post("/api/admin/users/:id/adjust-credits", async (request) => {

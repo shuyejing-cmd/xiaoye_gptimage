@@ -45,6 +45,7 @@ test("requires and validates the APIMart proxy when APIMart is selected", () => 
   });
   assert.throws(() => loadPlatformConfig({ ...env, APIMART_PROXY_URL: "" }), (error) => error.code === "missing_config");
   assert.throws(() => loadPlatformConfig({ ...env, APIMART_PROXY_URL: "socks5://mihomo:7890" }), (error) => error.code === "invalid_config");
+  assert.throws(() => loadPlatformConfig({ ...baseEnv, APIMART_API_KEY: "rollback-history-key" }), (error) => error.code === "missing_config");
 });
 
 test("local development can explicitly disable secure cookies", () => {

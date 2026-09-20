@@ -12,8 +12,7 @@ import { createCosProofStore } from "./payments/cos-proof-store.mjs";
 import { createRateLimiter } from "./http/rate-limiter.mjs";
 import { createSmtpMailer } from "./mail/smtp-mailer.mjs";
 import { createReferenceStore } from "../gateway/cos-reference-store.mjs";
-import { createGptGeClient } from "../gateway/gpt-ge-client.mjs";
-import { createApimartClient } from "../gateway/apimart-client.mjs";
+import { createProviderRegistry } from "./generation/provider-registry.mjs";
 import { createInstallationTokenService } from "./installations/installation-token-service.mjs";
 import { createReleaseService } from "./installations/release-service.mjs";
 
@@ -31,9 +30,9 @@ export async function createPlatformRuntime(config) {
   const walletService = createWalletService({ pool });
   const generationJobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: config.payloadEncryptionKey }), requestIdFactory: randomUUID });
   const paymentService = createPaymentService({ pool, proofStore, orderNoFactory: () => `WB${Date.now()}${randomUUID().slice(0, 8).toUpperCase()}` });
-  const provider = config.imageProvider === "gpt_ge" ? createGptGeClient(config.gptGe) : createApimartClient(config.apimart);
-  if (config.imageProvider === "apimart") provider.mode = "asynchronous";
-  return { pool, mailer, temporaryStore, proofStore, authService, apiKeyService, installationTokenService, releaseService, walletService, generationJobs, paymentService, rateLimiter: createRateLimiter({ pool }), provider };
+  const providers = createProviderRegistry(config);
+  const provider = providers[config.imageProvider];
+  return { pool, mailer, temporaryStore, proofStore, authService, apiKeyService, installationTokenService, releaseService, walletService, generationJobs, paymentService, rateLimiter: createRateLimiter({ pool }), providers, provider };
 }
 
 export async function ensureBootstrapAdmin({ pool, apiKeyService, email, legacyGatewayToken }) {

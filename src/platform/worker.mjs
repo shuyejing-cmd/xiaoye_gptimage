@@ -8,7 +8,7 @@ const runtime = await createPlatformRuntime(config);
 const worker = createGenerationWorker({ jobs: runtime.generationJobs, provider: runtime.provider, outputStore: runtime.temporaryStore, inputStore: runtime.temporaryStore });
 const reconciler = createReconciliationWorker({
   jobs: runtime.generationJobs,
-  providers: { [config.imageProvider]: runtime.provider },
+  providers: runtime.providers,
   outputStore: runtime.temporaryStore,
   notifyManualReview: (requestIds) => runtime.mailer.sendManualReview({ email: config.adminNotificationEmail, requestIds })
 });

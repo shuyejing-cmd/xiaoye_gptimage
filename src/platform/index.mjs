@@ -4,9 +4,11 @@ import fastifyStatic from "@fastify/static";
 import { loadPlatformConfig } from "./config.mjs";
 import { createPlatformRuntime, ensureBootstrapAdmin } from "./runtime.mjs";
 import { createPlatformApp } from "./http/platform-app.mjs";
+import { createProviderAvailability } from "./generation/provider-availability.mjs";
 
 const config = loadPlatformConfig();
 const runtime = await createPlatformRuntime(config);
+const providerAvailability = createProviderAvailability({ providerName: config.imageProvider, provider: runtime.provider });
 await ensureBootstrapAdmin({ pool: runtime.pool, apiKeyService: runtime.apiKeyService, email: config.adminEmail, legacyGatewayToken: config.legacyGatewayToken });
 const app = createPlatformApp({ ...runtime, provider: config.imageProvider, readyCheck: async () => {
   await runtime.pool.query("select 1");
@@ -15,8 +17,9 @@ const app = createPlatformApp({ ...runtime, provider: config.imageProvider, read
 }, generationAdmissionCheck: async () => {
   const invalid = await runtime.pool.query("select count(*)::int as count from wallets where available_credits<0 or held_credits<0");
   const unresolved = await runtime.pool.query("select count(*)::int as count from generation_jobs where state in ('unknown','manual_review')");
-  return Number(invalid.rows[0].count) === 0 && Number(unresolved.rows[0].count) < 100;
-}, publicRegistrationEnabled: config.publicRegistrationEnabled, cookieSecure: config.cookieSecure, publicOrigin: config.publicOrigin, installerVersion: config.installerVersion, logger: true });
+  if (Number(invalid.rows[0].count) !== 0 || Number(unresolved.rows[0].count) >= 100) return false;
+  return providerAvailability.check();
+}, providerStatus: () => providerAvailability.snapshot(), publicRegistrationEnabled: config.publicRegistrationEnabled, cookieSecure: config.cookieSecure, publicOrigin: config.publicOrigin, installerVersion: config.installerVersion, logger: true });
 
 const webRoot = resolve("web/dist");
 if (existsSync(webRoot)) {
