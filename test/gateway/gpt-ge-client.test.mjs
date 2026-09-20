@@ -8,6 +8,7 @@ test("gpt.ge text generation decodes and verifies its Base64 image response", as
   let request;
   const client = createGptGeClient({
     apiKey: "key",
+    model: "gpt-image-2.5-sunburst",
     fetchImpl: async (url, init) => {
       request = { url, init };
       return new Response(JSON.stringify({ data: [{ b64_json: ONE_PIXEL_PNG.toString("base64") }] }), { status: 200, headers: { "content-type": "application/json" } });
@@ -18,7 +19,7 @@ test("gpt.ge text generation decodes and verifies its Base64 image response", as
 
   assert.equal(request.url, "https://api.gpt.ge/v1/images/generations");
   assert.equal(request.init.headers.Authorization, "Bearer key");
-  assert.deepEqual(JSON.parse(request.init.body), { model: "gpt-image-2", prompt: "orange cat", n: 1, size: "832x832", quality: "medium", output_format: "png" });
+  assert.deepEqual(JSON.parse(request.init.body), { model: "gpt-image-2.5-sunburst", prompt: "orange cat", n: 1, size: "1024x1024", quality: "medium", output_format: "png" });
   assert.deepEqual(result.imageBuffer, ONE_PIXEL_PNG);
   assert.equal(result.mimeType, "image/png");
 });
@@ -105,4 +106,27 @@ test("gpt.ge maps a content-policy rejection to a safe WorkBuddy error and logs 
     (error) => error.code === "content_policy_violation" && error.message === "\u6b64\u6b21\u751f\u6210\u56e0\u7248\u6743\u6216\u5185\u5bb9\u5b89\u5168\u9650\u5236\u88ab\u62d2\u7edd\uff0c\u8bf7\u4fee\u6539\u63d0\u793a\u8bcd\u6216\u66f4\u6362\u53c2\u8003\u56fe\u540e\u91cd\u8bd5\u3002"
   );
   assert.deepEqual(events, [{ event: "provider_request_failed", provider: "gpt_ge", upstreamStatus: 400, category: "content_policy_violation", upstreamCode: "copyright_violation", upstreamType: "content_policy" }]);
+});
+
+test("gpt.ge maps every public aspect ratio to a valid gpt-image-2.5 custom size", async () => {
+  const ratios = ["1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "2:1", "1:2", "3:1", "1:3", "21:9"];
+  const sizes = [];
+  const client = createGptGeClient({
+    apiKey: "key",
+    model: "gpt-image-2.5-sunburst",
+    fetchImpl: async (_url, init) => {
+      sizes.push(JSON.parse(init.body).size);
+      return new Response(JSON.stringify({ data: [{ b64_json: ONE_PIXEL_PNG.toString("base64") }] }), { status: 200 });
+    }
+  });
+
+  for (const size of ratios) await client.generate({ request: { prompt: "test", size, quality: "medium", output_format: "png" } });
+
+  for (const size of sizes) {
+    const [width, height] = size.split("x").map(Number);
+    assert.equal(width % 16, 0);
+    assert.equal(height % 16, 0);
+    assert.ok(width * height >= 655_360, `${size} must meet the model's minimum pixel count`);
+    assert.ok(Math.max(width, height) / Math.min(width, height) <= 3, `${size} must stay within the supported aspect ratio`);
+  }
 });

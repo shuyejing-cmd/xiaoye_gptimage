@@ -50,7 +50,7 @@ export function loadPlatformConfig(env = process.env) {
     releaseBaseUrl,
     port: Number(env.PORT || 3000),
     cos: { secretId: env.COS_SECRET_ID, secretKey: env.COS_SECRET_KEY, bucket: env.COS_BUCKET, region: env.COS_REGION, prefix: env.COS_PREFIX || "private/workbuddy-images" },
-    gptGe: { apiKey: env.GPT_GE_API_KEY, baseUrl: env.GPT_GE_BASE_URL || "https://api.gpt.ge/v1" },
+    gptGe: { apiKey: env.GPT_GE_API_KEY, baseUrl: env.GPT_GE_BASE_URL || "https://api.gpt.ge/v1", model: env.GPT_GE_IMAGE_MODEL || "gpt-image-2.5-sunburst" },
     apimart: { apiKey: env.APIMART_API_KEY, baseUrl: env.APIMART_BASE_URL || "https://api.apimart.ai/v1" },
     smtp: { host: env.SMTP_HOST, port: Number(env.SMTP_PORT || 465), secure: env.SMTP_SECURE !== "false", user: env.SMTP_USER, pass: env.SMTP_PASS, from: env.SMTP_FROM },
     adminNotificationEmail: env.ADMIN_NOTIFICATION_EMAIL || env.SMTP_FROM,

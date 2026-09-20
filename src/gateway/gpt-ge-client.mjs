@@ -3,16 +3,17 @@ import { resolveProviderImage } from "./provider-image-result.mjs";
 import { createProviderUnreachableError, normalizeProviderError } from "./provider-error.mjs";
 
 const DEFAULT_BASE_URL = "https://api.gpt.ge/v1";
+const DEFAULT_MODEL = "gpt-image-2.5-sunburst";
 const MAX_REFERENCE_IMAGES = 4;
 const MAX_REFERENCE_IMAGE_BYTES = 4 * 1024 * 1024;
 const sizes = {
-  "auto": "auto", "1:1": "832x832", "3:2": "832x560", "2:3": "560x832",
-  "4:3": "832x624", "3:4": "624x832", "5:4": "832x672", "4:5": "672x832",
-  "16:9": "832x464", "9:16": "464x832", "2:1": "832x416", "1:2": "416x832",
-  "3:1": "832x272", "1:3": "272x832", "21:9": "832x352"
+  "auto": "auto", "1:1": "1024x1024", "3:2": "1248x832", "2:3": "832x1248",
+  "4:3": "1152x864", "3:4": "864x1152", "5:4": "1120x896", "4:5": "896x1120",
+  "16:9": "1344x752", "9:16": "752x1344", "2:1": "1440x720", "1:2": "720x1440",
+  "3:1": "1536x512", "1:3": "512x1536", "21:9": "1344x576"
 };
 
-const providerFields = (request) => ({ model: "gpt-image-2", prompt: request.prompt, n: 1, size: sizes[request.size] || "auto", quality: request.quality, output_format: request.output_format });
+const providerFields = (request, model) => ({ model, prompt: request.prompt, n: 1, size: sizes[request.size] || "auto", quality: request.quality, output_format: request.output_format });
 const logProviderFailure = (logger, error) => logger?.error?.({ event: "provider_request_failed", ...error.diagnostic });
 
 function normalizeReferenceImages({ referenceImage, referenceImages }) {
@@ -25,7 +26,7 @@ function normalizeReferenceImages({ referenceImage, referenceImages }) {
   return images;
 }
 
-export function createGptGeClient({ apiKey, baseUrl = DEFAULT_BASE_URL, fetchImpl = fetch, dnsLookup, logger = console }) {
+export function createGptGeClient({ apiKey, baseUrl = DEFAULT_BASE_URL, model = DEFAULT_MODEL, fetchImpl = fetch, dnsLookup, logger = console }) {
   const apiBaseUrl = baseUrl.replace(/\/+$/, "");
 
   async function send(path, init) {
@@ -61,11 +62,11 @@ export function createGptGeClient({ apiKey, baseUrl = DEFAULT_BASE_URL, fetchImp
       const images = normalizeReferenceImages({ referenceImage, referenceImages });
       if (images.length) {
         const form = new FormData();
-        for (const [key, value] of Object.entries(providerFields(request))) form.set(key, String(value));
+        for (const [key, value] of Object.entries(providerFields(request, model))) form.set(key, String(value));
         for (const image of images) form.append("image", new Blob([image.buffer], { type: image.mimeType }), image.fileName);
         return resolve(await send("/images/edits", { method: "POST", body: form }), requestId);
       }
-      return resolve(await send("/images/generations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(providerFields(request)) }), requestId);
+      return resolve(await send("/images/generations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(providerFields(request, model)) }), requestId);
     }
   };
 }

@@ -10,6 +10,12 @@ test("selects gpt.ge without replacing APIMart configuration", () => {
   assert.equal(config.gptGe.apiKey, "gpt-ge-key");
   assert.equal(config.apiKey, "apimart");
   assert.equal(config.gptGe.baseUrl, "https://api.gpt.ge/v1");
+  assert.equal(config.gptGe.model, "gpt-image-2.5-sunburst");
+});
+
+test("allows the gpt.ge image model to be changed without editing code", () => {
+  const config = loadConfig({ ...common, IMAGE_PROVIDER: "gpt_ge", GPT_GE_API_KEY: "gpt-ge-key", GPT_GE_IMAGE_MODEL: "future-image-model" });
+  assert.equal(config.gptGe.model, "future-image-model");
 });
 test("gpt.ge does not require an APIMart key when selected", () => {
   const { APIMART_API_KEY, ...withoutApimart } = common;

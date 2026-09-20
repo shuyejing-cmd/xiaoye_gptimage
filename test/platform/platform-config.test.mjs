@@ -19,7 +19,13 @@ const baseEnv = {
 };
 
 test("website cookies stay secure by default", () => {
-  assert.equal(loadPlatformConfig(baseEnv).cookieSecure, true);
+  const config = loadPlatformConfig(baseEnv);
+  assert.equal(config.cookieSecure, true);
+  assert.equal(config.gptGe.model, "gpt-image-2.5-sunburst");
+});
+
+test("allows the commercial worker gpt.ge image model to be configured", () => {
+  assert.equal(loadPlatformConfig({ ...baseEnv, GPT_GE_IMAGE_MODEL: "future-image-model" }).gptGe.model, "future-image-model");
 });
 
 test("local development can explicitly disable secure cookies", () => {
