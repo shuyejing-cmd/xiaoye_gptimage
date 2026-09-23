@@ -35,7 +35,7 @@ npm run web:build
 
 ## 生产配置
 
-复制 `.env.example` 为服务器上的 `.env`，填写数据库、两个独立 pepper、32 字节负载加密密钥、COS、SMTP 和一个图片 provider。不要把 `.env`、完整个人 Key、数据库备份或付款凭证提交到 Git。
+复制 `.env.example` 为服务器上的 `.env`，填写数据库、两个独立 pepper、32 字节负载加密密钥、COS、SMTP，以及 APIMart 和 GPT.Ge 两份供应商 Key。不要把 `.env`、完整个人 Key、数据库备份或付款凭证提交到 Git。
 
 生成 32 字节 Base64 密钥示例：
 
@@ -74,6 +74,22 @@ docker compose ps
 curl -fsS https://your-domain.example/healthz
 curl -fsS https://your-domain.example/readyz
 ```
+
+从之前的 Mihomo 版本升级时，先备份现有 `.env` 和数据库。在切换前，先从**当前运行的 worker 容器**直连国内接口；命令只输出状态码，不输出 Key 或响应正文：
+
+```bash
+docker compose -p workbuddy-image-mcp --env-file .env exec -T worker node -e "fetch('https://api.apib.ai/v1/models',{headers:{Authorization:'Bearer '+process.env.APIMART_API_KEY},signal:AbortSignal.timeout(10000)}).then(r=>{console.log('APIMART_STATUS='+r.status);process.exit(r.ok?0:1)}).catch(()=>process.exit(2))"
+```
+
+确认返回成功后，编辑**现有** `.env`：明确设置 `IMAGE_PROVIDER=apimart` 和 `APIMART_BASE_URL=https://api.apib.ai/v1`，同时保留两份供应商 Key。旧文件若仍写着 `api.apimart.ai`，新代码不会覆盖该值。验证配置后重建服务并清理旧代理容器：
+
+```bash
+docker compose -p workbuddy-image-mcp --env-file .env config --quiet
+docker compose -p workbuddy-image-mcp --env-file .env up -d --build --remove-orphans
+docker compose -p workbuddy-image-mcp --env-file .env ps
+```
+
+确认新服务正常后，检查旧卷 `workbuddy-image-mcp_mihomo-data` 是否存在、属于本项目且已无容器使用；再用 `docker volume rm workbuddy-image-mcp_mihomo-data` 精确删除其中的旧订阅和控制密钥。不要使用 `down --volumes`，它会连 PostgreSQL 数据卷一起删除。最后从 worker 容器带服务端 Key 验证 `/v1/models`，再执行一次测试生成并核对账本。
 
 人工回退时，将 `IMAGE_PROVIDER=gpt_ge` 后重建 API 和 worker；历史任务仍按数据库记录的原供应商对账。网站、登录和充值不依赖图片供应商的连通状态。
 

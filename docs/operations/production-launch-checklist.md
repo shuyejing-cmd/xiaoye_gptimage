@@ -21,7 +21,8 @@
 
 ## 生成与故障注入
 
-- [ ] `.env` 设置 `IMAGE_PROVIDER=apimart`、`APIMART_BASE_URL=https://api.apib.ai/v1`，并保留 APIMart 与 GPT.Ge 两份 Key 供历史任务对账；密钥未进入 Git 或日志。
+- [ ] 已备份并编辑服务器现有 `.env`：明确设置 `IMAGE_PROVIDER=apimart`、`APIMART_BASE_URL=https://api.apib.ai/v1`，并保留 APIMart 与 GPT.Ge 两份 Key；密钥未进入 Git 或日志。
+- [ ] 新 Compose 配置通过后，`up -d --build --remove-orphans` 已停止旧 Mihomo/MetaCubeXD 容器；确认无容器使用后只删除旧 `workbuddy-image-mcp_mihomo-data` 卷，保留 PostgreSQL 卷。
 - [ ] 从 worker 容器直接访问 `https://api.apib.ai/v1/models` 成功（带服务端 Key）；结果图片地址也可从 worker 直接下载。
 
 - [ ] 20 个相同幂等请求只有一个任务、一个 hold 和一次 provider 调用。

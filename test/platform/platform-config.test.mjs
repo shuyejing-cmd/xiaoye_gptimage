@@ -47,6 +47,9 @@ test("uses the domestic APIMart endpoint directly and requires both reconciliati
   });
   assert.throws(() => loadPlatformConfig({ ...baseEnv, APIMART_API_KEY: "" }), (error) => error.code === "missing_config");
   assert.throws(() => loadPlatformConfig({ ...baseEnv, GPT_GE_API_KEY: "" }), (error) => error.code === "missing_config");
+  assert.throws(() => loadPlatformConfig({ ...baseEnv, APIMART_BASE_URL: "http://api.apib.ai/v1" }), (error) => error.code === "invalid_config");
+  assert.throws(() => loadPlatformConfig({ ...baseEnv, APIMART_BASE_URL: "https://user:pass@api.apib.ai/v1" }), (error) => error.code === "invalid_config");
+  assert.throws(() => loadPlatformConfig({ ...baseEnv, GPT_GE_BASE_URL: "http://api.gpt.ge/v1" }), (error) => error.code === "invalid_config");
 });
 
 test("local development can explicitly disable secure cookies", () => {

@@ -22,3 +22,9 @@ test("gpt.ge does not require an APIMart key when selected", () => {
   const config = loadConfig({ ...withoutApimart, IMAGE_PROVIDER: "gpt_ge", GPT_GE_API_KEY: "gpt-ge-key" });
   assert.equal(config.imageProvider, "gpt_ge");
 });
+
+test("legacy gateway defaults to the domestic APIMart URL and rejects insecure provider URLs", () => {
+  assert.equal(loadConfig(common).apiBaseUrl, "https://api.apib.ai/v1");
+  assert.throws(() => loadConfig({ ...common, APIMART_BASE_URL: "http://api.apib.ai/v1" }), (error) => error.code === "invalid_config");
+  assert.throws(() => loadConfig({ ...common, GPT_GE_BASE_URL: "https://user:pass@api.gpt.ge/v1" }), (error) => error.code === "invalid_config");
+});
