@@ -2,7 +2,7 @@ import { AppError } from "../shared/errors.mjs";
 import { createProviderUnreachableError, normalizeProviderError } from "./provider-error.mjs";
 import { resolveProviderImage } from "./provider-image-result.mjs";
 
-const DEFAULT_BASE_URL = "https://api.apimart.ai/v1";
+const DEFAULT_BASE_URL = "https://api.apib.ai/v1";
 const normalizeBaseUrl = (value) => (value || DEFAULT_BASE_URL).replace(/\/+$/, "");
 const logProviderFailure = (logger, error) => logger?.error?.({ event: "provider_request_failed", ...error.diagnostic });
 

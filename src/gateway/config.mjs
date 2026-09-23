@@ -11,7 +11,7 @@ export function loadConfig(env = process.env) {
   return {
     imageProvider,
     apiKey: env.APIMART_API_KEY,
-    apiBaseUrl: env.APIMART_BASE_URL || "https://api.apimart.ai/v1",
+    apiBaseUrl: env.APIMART_BASE_URL || "https://api.apib.ai/v1",
     gptGe: { apiKey: env.GPT_GE_API_KEY, baseUrl: env.GPT_GE_BASE_URL || "https://api.gpt.ge/v1", model: env.GPT_GE_IMAGE_MODEL || "gpt-image-2.5-sunburst" },
     gatewayToken: env.MCP_GATEWAY_TOKEN,
     cos: { secretId: env.COS_SECRET_ID, secretKey: env.COS_SECRET_KEY, bucket: env.COS_BUCKET, region: env.COS_REGION, prefix: env.COS_PREFIX || "workbuddy-reference-images" },

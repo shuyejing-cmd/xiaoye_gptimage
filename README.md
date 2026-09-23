@@ -9,7 +9,7 @@
 - `src/index.mjs`：安装在用户电脑上的 stdio MCP bridge，只读取 `ALLOWED_IMAGE_ROOTS` 内的参考图。
 - `web/`：React/Vite 用户网站与管理后台。
 - `installer/`：包含 Node runtime 的 Inno Setup Windows 安装器。
-- `ops/`：Mihomo 私密配置生成、PostgreSQL 加密备份和恢复演练脚本。
+- `ops/`：PostgreSQL 加密备份和恢复演练脚本。
 
 PostgreSQL 是账户、钱包、账本、订单和任务状态的唯一事实来源。旧 SQLite 文件仅保留给旧 `/mcp` gateway，不迁移为已计费历史。
 
@@ -55,19 +55,17 @@ PUBLIC_REGISTRATION_ENABLED=false
 
 ## Docker Compose 部署
 
-APIMart 是生产主供应商时，订阅地址、控制密钥和 API Key 只放在服务器 `.env`：
+APIMart 使用国内接口作为生产主供应商。服务器 `.env` 同时保存 APIMart 和 GPT.Ge 的 Key，以便手动切换后仍能对账两家的未完成任务：
 
 ```dotenv
 IMAGE_PROVIDER=apimart
 APIMART_API_KEY=replace-me
-APIMART_BASE_URL=https://api.apimart.ai/v1
-APIMART_PROXY_URL=http://mihomo:7890
+APIMART_BASE_URL=https://api.apib.ai/v1
 APIMART_IMAGE_MODEL=gpt-image-2.5-sunburst
-MIHOMO_SUBSCRIPTION_URL=https://subscription.example/secret
-MIHOMO_CONTROLLER_SECRET=replace-with-at-least-32-random-characters
+GPT_GE_API_KEY=replace-me
 ```
 
-Compose 会把 Mihomo 私密配置写到独立卷：订阅每 6 小时刷新、节点每 60 秒检查，并由 `fallback` 自动切换。只有 `*.apimart.ai` 走代理；COS、SMTP、PostgreSQL 和 GPT.Ge 保持直连。代理端口不映射宿主机，控制接口和 MetaCubeXD 仅监听 `127.0.0.1:9090`、`127.0.0.1:9080`。
+API 和 worker 直连 `api.apib.ai`；无需运行 Mihomo。APIMart 连通检查失败时，新生成请求在冻结额度前返回 503；已领取但尚未提交的任务会延后，不会自动切换 GPT.Ge。
 
 ```bash
 cp .env.example .env
@@ -77,13 +75,7 @@ curl -fsS https://your-domain.example/healthz
 curl -fsS https://your-domain.example/readyz
 ```
 
-在本机用 SSH 转发访问面板：
-
-```powershell
-ssh -L 9080:127.0.0.1:9080 -L 9090:127.0.0.1:9090 ubuntu@118.25.152.249
-```
-
-打开 `http://127.0.0.1:9080`，控制器填写 `http://127.0.0.1:9090` 和 `.env` 中的控制密钥。代理暂时不可用时，网站、登录和充值仍正常；新任务在冻结额度前返回 503，worker 已领取但尚未提交的任务会延后，不会自动切换 GPT.Ge。人工回滚只需将 `IMAGE_PROVIDER=gpt_ge` 后重建 API 和 worker，历史任务仍按数据库记录的原供应商对账。
+人工回退时，将 `IMAGE_PROVIDER=gpt_ge` 后重建 API 和 worker；历史任务仍按数据库记录的原供应商对账。网站、登录和充值不依赖图片供应商的连通状态。
 
 `/healthz` 只表示进程存活；`/readyz` 会检查 PostgreSQL 和钱包不变量。API 在钱包异常或未知任务积压达到门限时暂停接收新生成，但查询和后台复核仍可使用。
 

@@ -1,44 +1,4 @@
 services:
-  mihomo-config:
-    build: .
-    user: "0:0"
-    command: ["node", "ops/mihomo/render-config.mjs"]
-    restart: "no"
-    env_file: .env
-    environment:
-      MIHOMO_CONFIG_PATH: /mihomo/config.yaml
-    volumes:
-      - mihomo-data:/mihomo
-    networks: [internal]
-
-  mihomo:
-    image: metacubex/mihomo:v1.19.31
-    restart: unless-stopped
-    command: ["-d", "/root/.config/mihomo", "-f", "/root/.config/mihomo/config.yaml"]
-    volumes:
-      - mihomo-data:/root/.config/mihomo
-    ports:
-      - "127.0.0.1:9090:9090"
-    depends_on:
-      mihomo-config:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "/mihomo", "-t", "-d", "/root/.config/mihomo", "-f", "/root/.config/mihomo/config.yaml"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks: [internal]
-
-  metacubexd:
-    image: ghcr.io/metacubex/metacubexd:v1.270.6
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:9080:80"
-    depends_on:
-      mihomo:
-        condition: service_healthy
-    networks: [internal]
-
   postgres:
     image: postgres:17-bookworm
     restart: unless-stopped
@@ -108,7 +68,6 @@ services:
     networks: [internal]
 
 volumes:
-  mihomo-data:
   postgres-data:
   postgres-backups:
   tasks-data:

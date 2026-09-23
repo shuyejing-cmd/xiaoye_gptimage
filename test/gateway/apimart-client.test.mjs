@@ -2,6 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createApimartClient } from "../../src/gateway/apimart-client.mjs";
 
+test("defaults to the domestic APIMart API", async () => {
+  let url;
+  const client = createApimartClient({
+    apiKey: "key",
+    fetchImpl: async (requestUrl) => { url = requestUrl; return new Response(JSON.stringify({ data: [{ task_id: "task-1" }] }), { status: 200 }); }
+  });
+  await client.submit({ prompt: "cat", size: "1:1", resolution: "1k", quality: "medium", output_format: "png", n: 1 });
+  assert.equal(url, "https://api.apib.ai/v1/images/generations");
+});
+
 test("reports an unreachable provider without leaking transport errors", async () => {
   const client = createApimartClient({ apiKey: "key", logger: { error() {} }, fetchImpl: async () => { throw new TypeError("fetch failed"); } });
   await assert.rejects(

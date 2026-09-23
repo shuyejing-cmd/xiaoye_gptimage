@@ -1,5 +1,7 @@
 # WorkBuddy APIMart + Mihomo Implementation Plan
 
+> 2026-09-23 变更：用户确认 APIMart 国内入口 `https://api.apib.ai/v1` 可直连。本计划中的 Mihomo、代理传输、订阅和面板步骤已取消；当前实施以 README 和生产上线清单中的国内直连配置为准。可靠计费、双供应商对账、参考图、分辨率和失败门禁保持原定目标。
+
 > **For agentic workers:** Implement inline with TDD and verify each task before continuing.
 
 **Goal:** Make APIMart the production image provider through an internal Mihomo sidecar while keeping GPT.Ge available for manual rollback.

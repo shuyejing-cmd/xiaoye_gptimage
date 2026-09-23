@@ -15,37 +15,38 @@ const baseEnv = {
   COS_REGION: "ap-shanghai",
   SMTP_HOST: "smtp.example.test",
   SMTP_FROM: "sender@example.test",
-  GPT_GE_API_KEY: "provider-key"
+  GPT_GE_API_KEY: "provider-key",
+  APIMART_API_KEY: "apimart-key"
 };
 
 test("website cookies stay secure by default", () => {
   const config = loadPlatformConfig(baseEnv);
   assert.equal(config.cookieSecure, true);
+  assert.equal(config.imageProvider, "apimart");
   assert.equal(config.gptGe.model, "gpt-image-2.5-sunburst");
 });
 
-test("allows the commercial worker gpt.ge image model to be configured", () => {
-  assert.equal(loadPlatformConfig({ ...baseEnv, GPT_GE_IMAGE_MODEL: "future-image-model" }).gptGe.model, "future-image-model");
+test("allows GPT.Ge to be selected only as a configured manual rollback", () => {
+  const config = loadPlatformConfig({ ...baseEnv, IMAGE_PROVIDER: "gpt_ge", GPT_GE_IMAGE_MODEL: "future-image-model" });
+  assert.equal(config.imageProvider, "gpt_ge");
+  assert.equal(config.gptGe.model, "future-image-model");
 });
 
-test("requires and validates the APIMart proxy when APIMart is selected", () => {
+test("uses the domestic APIMart endpoint directly and requires both reconciliation credentials", () => {
   const env = {
     ...baseEnv,
     IMAGE_PROVIDER: "apimart",
     APIMART_API_KEY: "apimart-key",
-    APIMART_PROXY_URL: "http://mihomo:7890",
     APIMART_IMAGE_MODEL: "gpt-image-2.5-flare"
   };
   const config = loadPlatformConfig(env);
   assert.deepEqual(config.apimart, {
     apiKey: "apimart-key",
-    baseUrl: "https://api.apimart.ai/v1",
-    proxyUrl: "http://mihomo:7890/",
+    baseUrl: "https://api.apib.ai/v1",
     model: "gpt-image-2.5-flare"
   });
-  assert.throws(() => loadPlatformConfig({ ...env, APIMART_PROXY_URL: "" }), (error) => error.code === "missing_config");
-  assert.throws(() => loadPlatformConfig({ ...env, APIMART_PROXY_URL: "socks5://mihomo:7890" }), (error) => error.code === "invalid_config");
-  assert.throws(() => loadPlatformConfig({ ...baseEnv, APIMART_API_KEY: "rollback-history-key" }), (error) => error.code === "missing_config");
+  assert.throws(() => loadPlatformConfig({ ...baseEnv, APIMART_API_KEY: "" }), (error) => error.code === "missing_config");
+  assert.throws(() => loadPlatformConfig({ ...baseEnv, GPT_GE_API_KEY: "" }), (error) => error.code === "missing_config");
 });
 
 test("local development can explicitly disable secure cookies", () => {
