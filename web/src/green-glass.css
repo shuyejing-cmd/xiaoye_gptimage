@@ -215,9 +215,12 @@
 .release-strip-compact { min-height: auto; margin-bottom: 16px; padding: 12px 16px; border: 1px solid var(--glass-rule); border-radius: var(--radius-card); background: rgba(250,255,246,.66); box-shadow: none; backdrop-filter: blur(16px); }
 .release-strip-compact.ready { border-color: rgba(139, 176, 158, .42); background: rgba(234, 248, 227, .68); }
 .release-strip-compact.ready > div b { color: #1c5c40; }
-.release-strip-compact > div { display: flex; align-items: baseline; gap: 12px; }
+.release-strip-compact > div:first-child { display: flex; align-items: baseline; gap: 12px; }
 .release-strip-compact p { margin: 0; color: var(--glass-muted); font-size: 12px; }
-.release-strip-compact > a { color: var(--forest); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.release-strip-compact .release-strip-actions { display: grid; justify-items: end; gap: 5px; }
+.release-strip-links { display: flex; align-items: center; justify-content: flex-end; gap: 16px; }
+.release-strip-links > a { color: var(--forest); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.release-strip-actions small { color: var(--glass-muted); font-size: 11px; text-align: right; }
 
 .key-workspace { min-height: 500px; display: grid; grid-template-columns: 250px minmax(0,1fr); overflow: hidden; }
 .user-surface .key-selector { position: relative; top: auto; height: auto; display: block; margin: 0; padding: 12px; overflow-x: visible; border: 0; border-right: 1px solid var(--glass-rule); border-radius: 0; background: rgba(229,247,221,.34); box-shadow: none; backdrop-filter: none; }
@@ -345,7 +348,9 @@
   .key-page-head .toolbar { width: 100%; justify-content: space-between; }
   .key-page-head .toolbar .primary { flex: 0 0 auto; }
   .release-strip-compact { align-items: flex-start; }
-  .release-strip-compact > div { display: grid; gap: 4px; }
+  .release-strip-compact > div:first-child { display: grid; gap: 4px; }
+  .release-strip-compact .release-strip-actions { justify-items: start; }
+  .release-strip-actions small { text-align: left; }
   .key-workspace { min-height: 0; grid-template-columns: 1fr; border-radius: 22px; }
   .user-surface .key-selector { display: flex; flex-direction: row; gap: 8px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--glass-rule); scrollbar-width: none; }
   .user-surface .key-selector::-webkit-scrollbar { display: none; }

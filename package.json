@@ -9,8 +9,8 @@
         "gateway": "node src/gateway/index.mjs",
         "platform:api": "node src/platform/index.mjs",
         "platform:worker": "node src/platform/worker.mjs",
-        "web:dev": "vite --config web/vite.config.js",
-        "web:build": "vite build --config web/vite.config.js",
+        "web:dev": "node scripts/build-skill-download.mjs && vite --config web/vite.config.js",
+        "web:build": "node scripts/build-skill-download.mjs && vite build --config web/vite.config.js",
         "build": "npm run web:build",
         "installer:build": "powershell -NoProfile -ExecutionPolicy Bypass -File installer/build-installer.ps1"
     },

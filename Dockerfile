@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY web ./web
+COPY skills ./skills
+COPY scripts ./scripts
 RUN npm run web:build
 
 FROM node:22-bookworm-slim AS runtime

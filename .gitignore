@@ -8,6 +8,7 @@ web/dist/
 installer/output/
 installer/stage/
 web/public/downloads/*.exe
+web/public/downloads/*.zip
 outputs/
 work/
 .runtime/
