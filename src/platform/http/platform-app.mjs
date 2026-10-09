@@ -62,7 +62,7 @@ export function createPlatformApp({
   publicRegistrationEnabled = false,
   cookieSecure = true,
   publicOrigin = "https://xiaoyeai.cn",
-  installerVersion = "1.2.4",
+  installerVersion = "1.2.5",
   provider = "gpt-ge",
   logger = false
 }) {
