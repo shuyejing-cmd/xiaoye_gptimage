@@ -46,6 +46,7 @@ test("login codes expire, allow at most five failures, and cannot be reused", as
   await service.requestCode({ email: "limit@example.com", ip: "203.0.113.11", deviceId: "device-2" });
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await assert.rejects(service.verifyCode({ email: "limit@example.com", code: "999999", ip: "203.0.113.11", deviceId: "device-2" }), (error) => error.code === "invalid_login_code");
+    assert.equal(Number((await pool.query("select attempts from email_login_codes where email='limit@example.com'")).rows[0].attempts), attempt + 1);
   }
   await assert.rejects(service.verifyCode({ email: "limit@example.com", code: "100000", ip: "203.0.113.11", deviceId: "device-2" }), (error) => error.code === "login_code_locked");
   await pool.end();

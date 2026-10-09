@@ -43,7 +43,7 @@ export function createAuthService({ pool, pepper, mailer, now = () => new Date()
 
     async verifyCode({ email: rawEmail, code, ip, deviceId }) {
       const email = normalizeEmail(rawEmail);
-      return withTransaction(pool, async (client) => {
+      const outcome = await withTransaction(pool, async (client) => {
         const found = await client.query(
           "select * from email_login_codes where email = $1 and consumed_at is null order by created_at desc, id desc limit 1",
           [email]
@@ -53,8 +53,8 @@ export function createAuthService({ pool, pepper, mailer, now = () => new Date()
         if (Number(login.attempts) >= 5) throw new AppError({ code: "login_code_locked", message: "验证码尝试次数过多，请重新获取", httpStatus: 429 });
         const expected = digest(pepper, "login-code", `${email}:${code}`);
         if (!equalDigest(login.code_hash, expected)) {
-          await client.query("update email_login_codes set attempts = attempts + 1 where id = $1", [login.id]);
-          throw new AppError({ code: "invalid_login_code", message: "验证码不正确", httpStatus: 400 });
+          const updated = await client.query("update email_login_codes set attempts = attempts + 1 where id = $1 and consumed_at is null and attempts < 5 returning attempts", [login.id]);
+          return { rejectedCode: updated.rowCount ? "invalid_login_code" : "login_code_locked" };
         }
         const consumed = await client.query("update email_login_codes set consumed_at = $2 where id = $1 and consumed_at is null returning id", [login.id, now()]);
         if (!consumed.rowCount) throw new AppError({ code: "login_code_used", message: "验证码已使用", httpStatus: 409 });
@@ -85,6 +85,9 @@ export function createAuthService({ pool, pepper, mailer, now = () => new Date()
         const wallet = (await client.query("select * from wallets where user_id = $1", [user.id])).rows[0];
         return { user: { id: user.id, email: user.email, status: user.status, role: user.role }, wallet: walletResult(wallet), sessionToken };
       });
+      if (outcome.rejectedCode === "invalid_login_code") throw new AppError({ code: "invalid_login_code", message: "验证码不正确", httpStatus: 400 });
+      if (outcome.rejectedCode === "login_code_locked") throw new AppError({ code: "login_code_locked", message: "验证码尝试次数过多，请重新获取", httpStatus: 429 });
+      return outcome;
     },
 
     async authenticateSession(sessionToken) {
