@@ -13,8 +13,8 @@ async function setup() {
   await runMigrations(pool);
   const user = (await pool.query("insert into users(email,status,role) values('buyer@example.com','active','user') returning id")).rows[0];
   const admin = (await pool.query("insert into users(email,status,role) values('admin@example.com','active','admin') returning id")).rows[0];
-  await pool.query("insert into wallets(user_id,available_credits,held_credits) values($1,5,0),($2,0,0)", [user.id, admin.id]);
-  const packageRow = (await pool.query("insert into recharge_packages(name,price_fen,credits) values('Starter',990,20) returning id")).rows[0];
+  await pool.query("insert into wallets(user_id,available_points,held_points) values($1,5,0),($2,0,0)", [user.id, admin.id]);
+  const packageRow = (await pool.query("insert into recharge_packages(name,price_fen,points) values('Starter',990,99) returning id")).rows[0];
   const stored = [];
   let order = 0;
   const service = createPaymentService({
@@ -29,8 +29,8 @@ async function setup() {
 test("recharge order preserves the selected package snapshot", async () => {
   const { pool, userId, packageId, service } = await setup();
   const order = await service.createOrder({ userId, packageId });
-  await pool.query("update recharge_packages set price_fen=1990,credits=50 where id=$1", [packageId]);
-  assert.deepEqual({ name: order.packageName, priceFen: order.priceFen, credits: order.credits, state: order.state }, { name: "Starter", priceFen: 990, credits: 20, state: "created" });
+  await pool.query("update recharge_packages set price_fen=1990,points=199 where id=$1", [packageId]);
+  assert.deepEqual({ name: order.packageName, priceFen: order.priceFen, points: order.points, state: order.state }, { name: "Starter", priceFen: 990, points: 99, state: "created" });
   await pool.end();
 });
 
@@ -66,46 +66,46 @@ test("payment service delegates instructions and proof storage to its provider",
   await pool.end();
 });
 
-test("approval credits the package and first recharge bonus exactly once", async () => {
+test("approval grants order points once without a first-recharge bonus", async () => {
   const { pool, userId, adminId, packageId, service } = await setup();
   const first = await service.createOrder({ userId, packageId });
   await service.submitProof({ userId, orderId: first.id, buffer: png, mimeType: "image/png" });
   await service.approve({ adminId, orderId: first.id });
   await service.approve({ adminId, orderId: first.id });
-  let wallet = (await pool.query("select available_credits from wallets where user_id=$1", [userId])).rows[0];
-  assert.equal(wallet.available_credits, 35);
+  let wallet = (await pool.query("select available_points from wallets where user_id=$1", [userId])).rows[0];
+  assert.equal(wallet.available_points, 104);
 
   const second = await service.createOrder({ userId, packageId });
   await service.submitProof({ userId, orderId: second.id, buffer: png, mimeType: "image/png" });
   await service.approve({ adminId, orderId: second.id });
-  wallet = (await pool.query("select available_credits from wallets where user_id=$1", [userId])).rows[0];
-  assert.equal(wallet.available_credits, 55);
+  wallet = (await pool.query("select available_points from wallets where user_id=$1", [userId])).rows[0];
+  assert.equal(wallet.available_points, 203);
   const bonuses = await pool.query("select count(*)::int as count from ledger_entries where user_id=$1 and event_type='first_recharge_bonus'", [userId]);
-  assert.equal(bonuses.rows[0].count, 1);
+  assert.equal(bonuses.rows[0].count, 0);
   assert.equal((await pool.query("select reason from audit_events where action='approve_recharge' and target_id=$1", [String(first.id)])).rows[0].reason, "管理员确认付款到账");
   await pool.end();
 });
 
-test("concurrent approval of one order credits the wallet only once", async () => {
+test("concurrent approval of one order points the wallet only once", async () => {
   const { pool, userId, adminId, packageId, service } = await setup();
   const order = await service.createOrder({ userId, packageId });
   await service.submitProof({ userId, orderId: order.id, buffer: png, mimeType: "image/png" });
   const results = await Promise.all(Array.from({ length: 10 }, () => service.approve({ adminId, orderId: order.id })));
   assert.equal(results.every((item) => item.state === "approved"), true);
-  assert.equal((await pool.query("select available_credits from wallets where user_id=$1", [userId])).rows[0].available_credits, 35);
+  assert.equal((await pool.query("select available_points from wallets where user_id=$1", [userId])).rows[0].available_points, 104);
   assert.equal(Number((await pool.query("select count(*)::int as count from ledger_entries where reference_type='recharge_order' and reference_id=$1", [String(order.id)])).rows[0].count), 1);
   await pool.end();
 });
 
-test("two concurrently approved first orders grant the first-recharge bonus once", async () => {
+test("two concurrently approved orders each grant their snapshot points once", async () => {
   const { pool, userId, adminId, packageId, service } = await setup();
   const first = await service.createOrder({ userId, packageId });
   const second = await service.createOrder({ userId, packageId });
   await service.submitProof({ userId, orderId: first.id, buffer: png, mimeType: "image/png" });
   await service.submitProof({ userId, orderId: second.id, buffer: png, mimeType: "image/png" });
   await Promise.all([service.approve({ adminId, orderId: first.id }), service.approve({ adminId, orderId: second.id })]);
-  assert.equal((await pool.query("select available_credits from wallets where user_id=$1", [userId])).rows[0].available_credits, 55);
-  assert.equal(Number((await pool.query("select count(*)::int as count from ledger_entries where event_type='first_recharge_bonus' and user_id=$1", [userId])).rows[0].count), 1);
+  assert.equal((await pool.query("select available_points from wallets where user_id=$1", [userId])).rows[0].available_points, 203);
+  assert.equal(Number((await pool.query("select count(*)::int as count from ledger_entries where event_type='first_recharge_bonus' and user_id=$1", [userId])).rows[0].count), 0);
   await pool.end();
 });
 

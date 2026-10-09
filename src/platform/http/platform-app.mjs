@@ -6,6 +6,7 @@ import { parseGenerationRequest } from "../../shared/contracts.mjs";
 import { AppError } from "../../shared/errors.mjs";
 import { withTransaction } from "../db/pool.mjs";
 import { buildWorkBuddyInstallPrompt } from "../installations/install-prompt.mjs";
+import { pointsForFen, PRICE_TABLE, PRICE_VERSION, REFERENCE_IMAGE_POINTS } from "../billing/points-pricing.mjs";
 
 const COOKIE_NAME = "wb_session";
 const MAX_REFERENCE_BYTES = 4 * 1024 * 1024;
@@ -18,13 +19,22 @@ function bearer(request) {
 }
 
 function walletBody(wallet) {
-  return { available_credits: Number(wallet.availableCredits), held_credits: Number(wallet.heldCredits) };
+  return { available_points: Number(wallet.availablePoints), held_points: Number(wallet.heldPoints) };
+}
+
+function pricingBody() {
+  return { price_version: PRICE_VERSION, price_table: PRICE_TABLE, reference_image_points: REFERENCE_IMAGE_POINTS, defaults: { size: "1:1", resolution: "2k", quality: "medium", output_format: "png" } };
 }
 
 function generationBody(job) {
   return {
     request_id: job.requestId,
     status: job.state,
+    points_cost: job.pointsCost,
+    price_version: job.priceVersion,
+    resolution: job.resolution,
+    quality: job.quality,
+    reference_count: job.referenceCount,
     ...(job.errorCode ? { error_code: job.errorCode } : {}),
     ...(job.wallet ? walletBody(job.wallet) : {})
   };
@@ -52,7 +62,7 @@ export function createPlatformApp({
   publicRegistrationEnabled = false,
   cookieSecure = true,
   publicOrigin = "https://xiaoyeai.cn",
-  installerVersion = "1.2.3",
+  installerVersion = "1.2.4",
   provider = "gpt-ge",
   logger = false
 }) {
@@ -132,7 +142,7 @@ export function createPlatformApp({
     const user = await websiteUser(request);
     return { user, wallet: walletBody(await walletService.getBalance(user.id)) };
   });
-  app.get("/api/wallet", async (request) => walletBody(await walletService.getBalance((await websiteUser(request)).id)));
+  app.get("/api/wallet", async (request) => ({ ...walletBody(await walletService.getBalance((await websiteUser(request)).id)), ...pricingBody() }));
   app.get("/api/ledger", async (request) => {
     const user = await websiteUser(request);
     const rows = await pool.query("select id,event_type,amount,reference_type,reference_id,created_at from ledger_entries where user_id=$1 order by created_at desc,id desc limit 100", [user.id]);
@@ -140,7 +150,7 @@ export function createPlatformApp({
   });
   app.get("/api/generations", async (request) => {
     const user = await websiteUser(request);
-    const rows = await pool.query("select request_id,state,error_code,created_at,completed_at from generation_jobs where user_id=$1 order by created_at desc,id desc limit 100", [user.id]);
+    const rows = await pool.query("select request_id,state,error_code,points_cost,price_version,resolution,quality,reference_count,created_at,completed_at from generation_jobs where user_id=$1 order by created_at desc,id desc limit 100", [user.id]);
     return { generations: rows.rows };
   });
 
@@ -182,7 +192,7 @@ export function createPlatformApp({
   });
 
   app.get("/api/recharge-packages", async () => {
-    const rows = await pool.query("select id,name,price_fen,credits from recharge_packages where active=true order by sort_order,id");
+    const rows = await pool.query("select id,name,price_fen,points from recharge_packages where active=true order by sort_order,id");
     return { packages: rows.rows };
   });
   app.get("/api/payment-instructions", async () => {
@@ -191,7 +201,7 @@ export function createPlatformApp({
   });
   app.get("/api/recharge-orders", async (request) => {
     const user = await websiteUser(request);
-    const rows = await pool.query("select id,order_no,package_name,price_fen,credits,state,note,expires_at,created_at from recharge_orders where user_id=$1 order by created_at desc,id desc", [user.id]);
+    const rows = await pool.query("select id,order_no,package_name,price_fen,points,state,note,expires_at,created_at from recharge_orders where user_id=$1 order by created_at desc,id desc", [user.id]);
     return { orders: rows.rows };
   });
   app.post("/api/recharge-orders", async (request, reply) => {
@@ -223,10 +233,11 @@ export function createPlatformApp({
   });
   app.post("/api/admin/recharge-packages", async (request, reply) => {
     const admin = await adminUser(request);
-    const { name, price_fen: priceFen, credits, sort_order: sortOrder = 0 } = request.body || {};
-    if (!String(name || "").trim() || !Number.isInteger(priceFen) || priceFen <= 0 || !Number.isInteger(credits) || credits <= 0) throw new AppError({ code: "invalid_recharge_package", message: "套餐名称、金额和额度无效", httpStatus: 400 });
+    const { name, price_fen: priceFen, sort_order: sortOrder = 0 } = request.body || {};
+    if (!String(name || "").trim() || request.body?.points !== undefined) throw new AppError({ code: "invalid_recharge_package", message: "套餐名称无效，积分由金额自动计算", httpStatus: 400 });
+    const points = pointsForFen(priceFen);
     const row = await withTransaction(pool, async (client) => {
-      const saved = (await client.query("insert into recharge_packages(name,price_fen,credits,sort_order) values($1,$2,$3,$4) returning *", [String(name).trim(), priceFen, credits, Number(sortOrder) || 0])).rows[0];
+      const saved = (await client.query("insert into recharge_packages(name,price_fen,points,sort_order) values($1,$2,$3,$4) returning *", [String(name).trim(), priceFen, points, Number(sortOrder) || 0])).rows[0];
       await client.query("insert into audit_events(actor_user_id,action,target_type,target_id,reason) values($1,'create_recharge_package','recharge_package',$2,$3)", [admin.id, String(saved.id), `创建套餐：${saved.name}`]);
       return saved;
     });
@@ -242,11 +253,12 @@ export function createPlatformApp({
     if (!existing) throw new AppError({ code: "recharge_package_not_found", message: "充值套餐不存在", httpStatus: 404 });
     const name = String(request.body?.name ?? existing.name).trim();
     const priceFen = Number(request.body?.price_fen ?? existing.price_fen);
-    const credits = Number(request.body?.credits ?? existing.credits);
+    if (request.body?.points !== undefined) throw new AppError({ code: "invalid_recharge_package", message: "积分由金额自动计算", httpStatus: 400 });
+    const points = pointsForFen(priceFen);
     const sortOrder = Number(request.body?.sort_order ?? existing.sort_order);
-    if (!name || !Number.isInteger(priceFen) || priceFen <= 0 || !Number.isInteger(credits) || credits <= 0 || !Number.isInteger(sortOrder)) throw new AppError({ code: "invalid_recharge_package", message: "套餐名称、金额、额度或排序无效", httpStatus: 400 });
+    if (!name || !Number.isInteger(sortOrder)) throw new AppError({ code: "invalid_recharge_package", message: "套餐名称或排序无效", httpStatus: 400 });
     return withTransaction(pool, async (client) => {
-      const row = (await client.query("update recharge_packages set name=$2,price_fen=$3,credits=$4,active=$5,sort_order=$6,updated_at=now() where id=$1 returning *", [existing.id, name, priceFen, credits, request.body?.active ?? existing.active, sortOrder])).rows[0];
+      const row = (await client.query("update recharge_packages set name=$2,price_fen=$3,points=$4,active=$5,sort_order=$6,updated_at=now() where id=$1 returning *", [existing.id, name, priceFen, points, request.body?.active ?? existing.active, sortOrder])).rows[0];
       await client.query("insert into audit_events(actor_user_id,action,target_type,target_id,reason) values($1,'update_recharge_package','recharge_package',$2,$3)", [admin.id, String(row.id), `更新套餐：${row.name}`]);
       return row;
     });
@@ -283,7 +295,7 @@ export function createPlatformApp({
   });
   app.get("/api/admin/users", async (request) => {
     await adminUser(request);
-    const rows = await pool.query("select u.id,u.email,u.status,u.role,u.created_at,w.available_credits,w.held_credits from users u join wallets w on w.user_id=u.id order by u.created_at desc limit 200");
+    const rows = await pool.query("select u.id,u.email,u.status,u.role,u.created_at,w.available_points,w.held_points from users u join wallets w on w.user_id=u.id order by u.created_at desc limit 200");
     return { users: rows.rows };
   });
   app.patch("/api/admin/users/:id", async (request) => {
@@ -293,8 +305,16 @@ export function createPlatformApp({
     if (!new Set(["active", "suspended"]).has(status) || !reason) throw new AppError({ code: "invalid_user_status_change", message: "账户状态和变更原因无效", httpStatus: 400 });
     if (String(admin.id) === String(request.params.id) && status === "suspended") throw new AppError({ code: "cannot_suspend_self", message: "管理员不能停用自己的账户", httpStatus: 409 });
     return withTransaction(pool, async (client) => {
+      const previous = (await client.query("select status from users where id=$1 for update", [request.params.id])).rows[0];
       const user = (await client.query("update users set status=$2,updated_at=now() where id=$1 returning id,email,status,role,created_at", [request.params.id, status])).rows[0];
       if (!user) throw new AppError({ code: "user_not_found", message: "用户不存在", httpStatus: 404 });
+      if (previous.status === "pending_review" && status === "active") {
+        const alreadyAwarded = await client.query("select id from ledger_entries where reference_type='user' and reference_id=$1 and event_type='signup_bonus'", [String(user.id)]);
+        if (!alreadyAwarded.rowCount) {
+          await client.query("update wallets set available_points=available_points+20,version=version+1,updated_at=now() where user_id=$1", [user.id]);
+          await client.query("insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id) values($1,'signup_bonus',20,'user',$2)", [user.id, String(user.id)]);
+        }
+      }
       await client.query("insert into audit_events(actor_user_id,action,target_type,target_id,reason) values($1,'change_user_status','user',$2,$3)", [admin.id, String(user.id), reason.slice(0, 500)]);
       return user;
     });
@@ -302,11 +322,12 @@ export function createPlatformApp({
   app.get("/api/admin/metrics", async (request) => {
     await adminUser(request);
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [states, oldestQueued, recentTerminals, invalidWallets] = await Promise.all([
+    const [states, oldestQueued, recentTerminals, invalidWallets, tierCosts] = await Promise.all([
       pool.query("select state,count(*)::int as count from generation_jobs group by state"),
       pool.query("select created_at from generation_jobs where state='queued' order by created_at,id limit 1"),
       pool.query("select state,error_code,count(*)::int as count from generation_jobs where completed_at>=$1 and state in ('succeeded','failed') group by state,error_code", [since]),
-      pool.query("select count(*)::int as count from wallets where available_credits<0 or held_credits<0")
+      pool.query("select count(*)::int as count from wallets where available_points<0 or held_points<0"),
+      pool.query("select price_version,resolution,quality,reference_count,count(*)::int as generated_count,sum(points_cost) as points_revenue,sum(upstream_cost_amount) as upstream_cost_amount from generation_jobs where state='succeeded' and completed_at>=$1 group by price_version,resolution,quality,reference_count", [since])
     ]);
     const stateCounts = Object.fromEntries(states.rows.map((row) => [row.state, Number(row.count)]));
     const terminalCount = recentTerminals.rows.reduce((sum, row) => sum + Number(row.count), 0);
@@ -318,10 +339,11 @@ export function createPlatformApp({
       generation_success_rate_24h: terminalCount ? succeeded / terminalCount : null,
       provider_error_rate_24h: terminalCount ? providerFailures / terminalCount : null,
       wallet_invariant_violations: Number(invalidWallets.rows[0].count),
+      cost_by_tier_24h: tierCosts.rows.map((row) => ({ price_version: Number(row.price_version), resolution: row.resolution, quality: row.quality, reference_count: Number(row.reference_count), generated_count: Number(row.generated_count), points_revenue: Number(row.points_revenue), upstream_cost_amount: row.upstream_cost_amount == null ? null : Number(row.upstream_cost_amount) })),
       provider_status: providerStatus()
     };
   });
-  app.post("/api/admin/users/:id/adjust-credits", async (request) => {
+  app.post("/api/admin/users/:id/adjust-points", async (request) => {
     const admin = await adminUser(request);
     return walletBody(await walletService.adjust({ userId: request.params.id, amount: request.body?.amount, adminId: admin.id, reason: request.body?.reason, referenceId: request.headers["idempotency-key"] }));
   });
@@ -346,14 +368,16 @@ export function createPlatformApp({
 
   const generationHandler = async (request, reply) => {
     const identity = await keyUser(request);
-    if (!(await generationAdmissionCheck())) throw new AppError({ code: "generation_temporarily_paused", message: "生成服务正在进行账务检查，请稍后重试", httpStatus: 503, retryable: true });
     const input = await parseGenerationInput(request);
     const job = await generationJobs.enqueue({
       userId: identity.userId,
       idempotencyKey: request.headers["idempotency-key"],
       provider,
       ...input,
-      beforeCreate: rateLimiter ? (client) => rateLimiter.consume({ scope: "generation", subject: identity.userId, limit: 5, windowMs: 60_000, queryable: client }) : undefined
+      beforeCreate: async (client) => {
+        if (!(await generationAdmissionCheck(client))) throw new AppError({ code: "generation_temporarily_paused", message: "生成服务正在进行账务检查，请稍后重试", httpStatus: 503, retryable: true });
+        if (rateLimiter) await rateLimiter.consume({ scope: "generation", subject: identity.userId, limit: 5, windowMs: 60_000, queryable: client });
+      }
     });
     const current = await generationJobs.getForUser({ userId: identity.userId, requestId: job.requestId });
     return reply.code(current.state === "succeeded" || current.state === "failed" ? 200 : 202).send(generationBody(current));
@@ -377,7 +401,7 @@ export function createPlatformApp({
   app.get("/v1/account/balance", async (request) => {
     const identity = await keyUser(request);
     if (rateLimiter) await rateLimiter.consume({ scope: "key_query", subject: identity.keyId, limit: 60, windowMs: 60_000 });
-    return walletBody(await walletService.getBalance(identity.userId));
+    return { ...walletBody(await walletService.getBalance(identity.userId)), ...pricingBody() };
   });
 
   app.setErrorHandler((error, request, reply) => {

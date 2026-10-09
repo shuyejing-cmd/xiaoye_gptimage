@@ -22,7 +22,7 @@ function equalDigest(left, right) {
 }
 
 function walletResult(row) {
-  return { availableCredits: Number(row.available_credits), heldCredits: Number(row.held_credits) };
+  return { availablePoints: Number(row.available_points), heldPoints: Number(row.held_points) };
 }
 
 export function createAuthService({ pool, pepper, mailer, now = () => new Date(), randomCode = () => String(Math.floor(100000 + Math.random() * 900000)), randomToken = () => randomUUID() }) {
@@ -69,9 +69,9 @@ export function createAuthService({ pool, pepper, mailer, now = () => new Date()
             "insert into users(email,status,role,signup_ip,bonus_device_id,created_at,updated_at) values($1,$2,'user',$3,$4,$5,$5) returning *",
             [email, eligible ? "active" : "pending_review", ip || null, deviceId || null, now()]
           )).rows[0];
-          await client.query("insert into wallets(user_id,available_credits,held_credits) values($1,$2,0)", [user.id, eligible ? 5 : 0]);
+          await client.query("insert into wallets(user_id,available_points,held_points) values($1,$2,0)", [user.id, eligible ? 20 : 0]);
           if (eligible) await client.query(
-            "insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id) values($1,'signup_bonus',5,'user',$2)",
+            "insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id) values($1,'signup_bonus',20,'user',$2)",
             [user.id, String(user.id)]
           );
         }

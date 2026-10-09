@@ -42,7 +42,7 @@ export function createReconciliationWorker({ jobs, providers, outputStore, notif
         const stored = provider.downloadImage
           ? await provider.downloadImage(task.imageUrl).then((image) => outputStore.putGenerated({ buffer: image.imageBuffer, mimeType: image.mimeType, requestId: job.requestId }))
           : await outputStore.putGeneratedFromUrl({ url: task.imageUrl, requestId: job.requestId });
-        await jobs.markOutputPersisting({ requestId: job.requestId, objectKey: stored.objectKey, mimeType: stored.mimeType });
+        await jobs.markOutputPersisting({ requestId: job.requestId, objectKey: stored.objectKey, mimeType: stored.mimeType, upstreamCost: task.upstreamCost });
         await jobs.succeed({ requestId: job.requestId });
         await removeReferences(job);
       } else if (FAILURE_STATES.has(state)) {

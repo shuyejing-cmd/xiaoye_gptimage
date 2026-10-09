@@ -23,19 +23,19 @@ async function setup() {
   return { pool, service, sent };
 }
 
-test("verified email receives signup credits exactly once across later logins", async () => {
+test("verified email receives 20 signup points exactly once across later logins", async () => {
   const { pool, service, sent } = await setup();
   await service.requestCode({ email: " Member@Example.com ", ip: "203.0.113.10", deviceId: "device-1" });
   assert.equal(sent[0].email, "member@example.com");
   assert.equal(sent[0].code, "100000");
 
   const first = await service.verifyCode({ email: "member@example.com", code: "100000", ip: "203.0.113.10", deviceId: "device-1" });
-  assert.equal(first.wallet.availableCredits, 5);
+  assert.equal(first.wallet.availablePoints, 20);
   assert.equal(first.sessionToken, "session-1");
 
   await service.requestCode({ email: "member@example.com", ip: "203.0.113.10", deviceId: "device-1" });
   const second = await service.verifyCode({ email: "member@example.com", code: "100001", ip: "203.0.113.10", deviceId: "device-1" });
-  assert.equal(second.wallet.availableCredits, 5);
+  assert.equal(second.wallet.availablePoints, 20);
   const ledger = await pool.query("select event_type from ledger_entries where user_id = $1", [first.user.id]);
   assert.deepEqual(ledger.rows.map((row) => row.event_type), ["signup_bonus"]);
   await pool.end();
@@ -57,7 +57,7 @@ test("a reused device registers the account but withholds another signup bonus",
   await service.verifyCode({ email: "first@example.com", code: "100000", ip: "203.0.113.12", deviceId: "shared-device" });
   await service.requestCode({ email: "second@example.com", ip: "203.0.113.13", deviceId: "shared-device" });
   const second = await service.verifyCode({ email: "second@example.com", code: "100001", ip: "203.0.113.13", deviceId: "shared-device" });
-  assert.equal(second.wallet.availableCredits, 0);
+  assert.equal(second.wallet.availablePoints, 0);
   assert.equal(second.user.status, "pending_review");
   await pool.end();
 });

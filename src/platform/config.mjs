@@ -17,7 +17,7 @@ export function loadPlatformConfig(env = process.env) {
   if (!new Set(["gpt_ge", "apimart"]).has(imageProvider)) throw new AppError({ code: "invalid_config", message: "IMAGE_PROVIDER must be gpt_ge or apimart", httpStatus: 500 });
   requireValues(env, ["GPT_GE_API_KEY", "APIMART_API_KEY"]);
   const publicOrigin = env.PUBLIC_ORIGIN || "https://xiaoyeai.cn";
-  const installerVersion = env.WORKBUDDY_INSTALLER_VERSION || "1.2.3";
+  const installerVersion = env.WORKBUDDY_INSTALLER_VERSION || "1.2.4";
   const releaseRepository = String(env.WORKBUDDY_RELEASE_REPOSITORY || "").trim() || null;
   const releaseBaseUrlValue = String(env.WORKBUDDY_RELEASE_BASE_URL || "").trim();
   let releaseBaseUrl = null;

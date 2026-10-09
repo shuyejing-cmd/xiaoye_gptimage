@@ -66,6 +66,7 @@ export function createApimartClient({
       if (!task?.status) throw new AppError({ code: "provider_protocol_error", message: "provider returned invalid task", httpStatus: 502 });
       return {
         status: task.status,
+        upstreamCost: typeof task.cost === "number" && Number.isFinite(task.cost) && task.cost >= 0 && task.cost < 1_000_000 ? task.cost : null,
         imageUrl: task.result?.images?.[0]?.url?.[0],
         expiresAt: task.result?.images?.[0]?.expires_at,
         errorCode: task.error?.code || task.error_code

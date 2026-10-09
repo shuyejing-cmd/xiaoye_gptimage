@@ -52,7 +52,9 @@ test("email login creates a secure website session and exposes the wallet", asyn
   const me = await app.inject({ method: "GET", url: "/api/me", headers: { cookie: loginResult.cookie } });
   assert.equal(me.statusCode, 200);
   assert.equal(me.json().user.email, "web@example.com");
-  assert.deepEqual(me.json().wallet, { available_credits: 5, held_credits: 0 });
+  assert.deepEqual(me.json().wallet, { available_points: 20, held_points: 0 });
+  const wallet = await app.inject({ method: "GET", url: "/api/wallet", headers: { cookie: loginResult.cookie } });
+  assert.equal(wallet.json().price_table["4k"].high, 22);
   await app.close();
   await pool.end();
 });
@@ -70,7 +72,7 @@ test("local HTTP login can omit the Secure cookie attribute when explicitly conf
 test("closed registration still allows existing users to request a login code", async () => {
   const { pool, app, sent } = await setup({ publicRegistrationEnabled: false });
   const existing = (await pool.query("insert into users(email,status,role) values('existing@example.com','active','user') returning id")).rows[0];
-  await pool.query("insert into wallets(user_id,available_credits,held_credits) values($1,5,0)", [existing.id]);
+  await pool.query("insert into wallets(user_id,available_points,held_points) values($1,5,0)", [existing.id]);
   const allowed = await app.inject({ method: "POST", url: "/api/auth/email-code", payload: { email: "existing@example.com", device_id: "existing-browser" } });
   const closed = await app.inject({ method: "POST", url: "/api/auth/email-code", payload: { email: "new@example.com", device_id: "new-browser" } });
   assert.equal(allowed.statusCode, 202);
@@ -93,7 +95,10 @@ test("personal API key creates one idempotent billed job", async () => {
   assert.equal(first.statusCode, 202);
   assert.equal(duplicate.json().request_id, first.json().request_id);
   const balance = await app.inject({ method: "GET", url: "/v1/account/balance", headers: { authorization: `Bearer ${key}` } });
-  assert.deepEqual(balance.json(), { available_credits: 4, held_credits: 1 });
+  assert.equal(balance.json().available_points, 15);
+  assert.equal(balance.json().held_points, 5);
+  assert.equal(balance.json().price_table["2k"].medium, 5);
+  assert.equal(first.json().points_cost, 5);
   await app.close();
   await pool.end();
 });
@@ -116,8 +121,24 @@ test("provider outage rejects a generation before freezing credit", async () => 
   const key = (await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name: "Paused" } })).json().key;
   const response = await app.inject({ method: "POST", url: "/v1/generations", headers: { authorization: `Bearer ${key}`, "idempotency-key": "paused-request" }, payload: { prompt: "cat" } });
   assert.equal(response.statusCode, 503);
-  assert.deepEqual((await pool.query("select available_credits,held_credits from wallets where user_id=$1", [owner.body.user.id])).rows[0], { available_credits: 5, held_credits: 0 });
+  assert.deepEqual((await pool.query("select available_points,held_points from wallets where user_id=$1", [owner.body.user.id])).rows[0], { available_points: 20, held_points: 0 });
   assert.equal((await pool.query("select count(*)::int as count from generation_jobs")).rows[0].count, 0);
+  await app.close();
+  await pool.end();
+});
+
+test("provider outage does not hide an already accepted idempotent task", async () => {
+  let available = true;
+  const { pool, app, sent } = await setup({ generationAdmissionCheck: async () => available });
+  const owner = await login(app, sent, "retry@example.com", "retry-browser");
+  const key = (await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name: "Retry" } })).json().key;
+  const request = { method: "POST", url: "/v1/generations", headers: { authorization: `Bearer ${key}`, "idempotency-key": "same-after-outage" }, payload: { prompt: "cat" } };
+  const first = await app.inject(request);
+  available = false;
+  const retry = await app.inject(request);
+  assert.equal(retry.statusCode, 202);
+  assert.equal(retry.json().request_id, first.json().request_id);
+  assert.equal(retry.json().points_cost, 5);
   await app.close();
   await pool.end();
 });
@@ -264,8 +285,8 @@ test("website and admin APIs enforce sessions, roles, and order isolation", asyn
   const two = await login(app, sent, "orders-two@example.com", "orders-two");
   const forbidden = await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie: one.cookie } });
   assert.equal(forbidden.statusCode, 403);
-  const pack = (await pool.query("insert into recharge_packages(name,price_fen,credits) values('Private',1000,10) returning id")).rows[0];
-  await pool.query("insert into recharge_orders(order_no,user_id,package_id,provider,package_name,price_fen,credits,state,expires_at) values('WBPRIVATE',$1,$2,'manual_qr','Private',1000,10,'created',$3)", [one.body.user.id, pack.id, new Date("2026-09-15T00:00:00Z")]);
+  const pack = (await pool.query("insert into recharge_packages(name,price_fen,points) values('Private',1000,10) returning id")).rows[0];
+  await pool.query("insert into recharge_orders(order_no,user_id,package_id,provider,package_name,price_fen,points,state,expires_at) values('WBPRIVATE',$1,$2,'manual_qr','Private',1000,10,'created',$3)", [one.body.user.id, pack.id, new Date("2026-09-15T00:00:00Z")]);
   const ownOrders = await app.inject({ method: "GET", url: "/api/recharge-orders", headers: { cookie: one.cookie } });
   const otherOrders = await app.inject({ method: "GET", url: "/api/recharge-orders", headers: { cookie: two.cookie } });
   assert.equal(ownOrders.json().orders.length, 1);
@@ -286,10 +307,44 @@ test("admin metrics expose only the current provider health summary", async () =
   const { pool, app, sent } = await setup({ providerStatus: () => providerHealth });
   const admin = await login(app, sent, "metrics-admin@example.com", "metrics-admin-browser");
   await pool.query("update users set role='admin' where id=$1", [admin.body.user.id]);
+  await pool.query("insert into generation_jobs(request_id,user_id,idempotency_key,state,provider,points_cost,price_version,resolution,quality,reference_count,upstream_cost_amount,completed_at) values('cost-1',$1,'cost-idem','succeeded','apimart',5,1,'2k','medium',0,0.02675,now())", [admin.body.user.id]);
   const response = await app.inject({ method: "GET", url: "/api/admin/metrics", headers: { cookie: admin.cookie } });
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json().provider_status, providerHealth);
+  assert.deepEqual(response.json().cost_by_tier_24h, [{ price_version: 1, resolution: "2k", quality: "medium", reference_count: 0, generated_count: 1, points_revenue: 5, upstream_cost_amount: 0.02675 }]);
   assert.doesNotMatch(JSON.stringify(response.json()), /api[_-]?key|proxy_url|secret/i);
+  await app.close();
+  await pool.end();
+});
+
+test("admin activation grants a pending-review account 20 signup points only once", async () => {
+  const { pool, app, sent } = await setup();
+  const admin = await login(app, sent, "bonus-admin@example.com", "shared-device");
+  await pool.query("update users set role='admin' where id=$1", [admin.body.user.id]);
+  const pending = await login(app, sent, "bonus-pending@example.com", "shared-device");
+  assert.equal(pending.body.user.status, "pending_review");
+  assert.equal(pending.body.wallet.available_points, 0);
+  const request = { method: "PATCH", url: `/api/admin/users/${pending.body.user.id}`, headers: { cookie: admin.cookie }, payload: { status: "active", reason: "人工核验" } };
+  assert.equal((await app.inject(request)).statusCode, 200);
+  assert.equal((await app.inject(request)).statusCode, 200);
+  assert.equal((await pool.query("select available_points from wallets where user_id=$1", [pending.body.user.id])).rows[0].available_points, 20);
+  assert.equal((await pool.query("select count(*)::int as count from ledger_entries where user_id=$1 and event_type='signup_bonus'", [pending.body.user.id])).rows[0].count, 1);
+  await app.close();
+  await pool.end();
+});
+
+test("admin package points derive solely from a valid payment amount", async () => {
+  const { pool, app, sent } = await setup();
+  const admin = await login(app, sent, "pack-admin@example.com", "pack-browser");
+  await pool.query("update users set role='admin' where id=$1", [admin.body.user.id]);
+  const headers = { cookie: admin.cookie };
+  const created = await app.inject({ method: "POST", url: "/api/admin/recharge-packages", headers, payload: { name: "十元", price_fen: 1000 } });
+  assert.equal(created.statusCode, 201);
+  assert.equal(created.json().points, 100);
+  const invalid = await app.inject({ method: "POST", url: "/api/admin/recharge-packages", headers, payload: { name: "非法价格", price_fen: 105 } });
+  assert.equal(invalid.statusCode, 400);
+  const mismatch = await app.inject({ method: "POST", url: "/api/admin/recharge-packages", headers, payload: { name: "不一致", price_fen: 1000, points: 999 } });
+  assert.equal(mismatch.statusCode, 400);
   await app.close();
   await pool.end();
 });

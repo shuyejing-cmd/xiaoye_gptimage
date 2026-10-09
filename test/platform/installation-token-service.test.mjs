@@ -12,7 +12,7 @@ async function setup() {
   const pool = new Pool();
   await runMigrations(pool);
   const user = (await pool.query("insert into users(email,status,role) values('install@example.com','active','user') returning id")).rows[0];
-  await pool.query("insert into wallets(user_id,available_credits,held_credits) values($1,5,0)", [user.id]);
+  await pool.query("insert into wallets(user_id,available_points,held_points) values($1,5,0)", [user.id]);
   await pool.query("insert into sessions(id,user_id,token_hash,expires_at) values('session-1',$1,'session-hash','2026-09-16T00:00:00Z')", [user.id]);
   let keySeed = 1;
   let tokenSeed = 20;

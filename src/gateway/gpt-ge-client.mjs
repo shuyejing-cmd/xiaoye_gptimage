@@ -13,7 +13,14 @@ const sizes = {
   "3:1": "1536x512", "1:3": "512x1536", "21:9": "1344x576"
 };
 
-const providerFields = (request, model) => ({ model, prompt: request.prompt, n: 1, size: sizes[request.size] || "auto", quality: request.quality, output_format: request.output_format });
+function providerSize(request) {
+  const base = sizes[request.size] || "1024x1024";
+  const [width, height] = (base === "auto" ? "1024x1024" : base).split("x").map(Number);
+  const scale = request.resolution === "4k" ? 4 : request.resolution === "2k" || request.resolution === "auto" || !request.resolution ? 2 : 1;
+  return `${width * scale}x${height * scale}`;
+}
+
+const providerFields = (request, model) => ({ model, prompt: request.prompt, n: 1, size: providerSize(request), quality: request.quality, output_format: request.output_format });
 const logProviderFailure = (logger, error) => logger?.error?.({ event: "provider_request_failed", ...error.diagnostic });
 
 function normalizeReferenceImages({ referenceImage, referenceImages }) {

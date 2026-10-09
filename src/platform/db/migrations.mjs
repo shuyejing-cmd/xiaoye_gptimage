@@ -211,6 +211,32 @@ const migrations = [
     statements: [
       "alter table api_keys add column if not exists deleted_at timestamptz"
     ]
+  },
+  {
+    version: 8,
+    statements: [
+      // PostgreSQL holds this DDL table lock until commit. Check active jobs only after it is acquired.
+      "alter table generation_jobs add column points_cost integer not null default 5 check (points_cost > 0)",
+      "alter table wallets rename column available_credits to available_points",
+      "alter table wallets rename column held_credits to held_points",
+      "alter table wallets drop constraint wallet_available_nonnegative",
+      "alter table wallets drop constraint wallet_held_nonnegative",
+      "alter table wallets add constraint wallet_available_nonnegative check (available_points >= 0)",
+      "alter table wallets add constraint wallet_held_nonnegative check (held_points >= 0)",
+      "update wallets set available_points=available_points*5,held_points=held_points*5",
+      "alter table recharge_packages rename column credits to points",
+      "alter table recharge_orders rename column credits to points",
+      "update recharge_orders set points=points*5",
+      "alter table credit_holds rename column amount to points_amount",
+      "update credit_holds set points_amount=points_amount*5",
+      "update ledger_entries set amount=amount*5",
+      "alter table generation_jobs add column price_version integer not null default 0",
+      "alter table generation_jobs add column resolution text",
+      "alter table generation_jobs add column quality text",
+      "alter table generation_jobs add column reference_count integer not null default 0",
+      "alter table generation_jobs add column upstream_cost_amount numeric(12,6)",
+      "create index if not exists generation_jobs_cost_idx on generation_jobs(price_version,resolution,quality,reference_count,completed_at)"
+    ]
   }
 ];
 
@@ -222,7 +248,21 @@ export async function runMigrations(pool) {
     const client = await pool.connect();
     try {
       await client.query("begin");
-      for (const statement of migration.statements) await client.query(statement);
+      for (const [index, statement] of migration.statements.entries()) {
+        await client.query(statement);
+        if (migration.version === 8 && index === 0) {
+          const active = await client.query("select count(*)::int as count from generation_jobs where state in ('queued','submitting','provider_pending','output_persisting','unknown','manual_review')");
+          if (Number(active.rows[0].count) > 0) throw new Error("active_generation_jobs: finish or review existing tasks before points migration");
+        }
+      }
+      if (migration.version === 8) {
+        const packages = await client.query("select id,price_fen,points from recharge_packages");
+        for (const pack of packages.rows) {
+          const priceFen = Number(pack.price_fen);
+          const validPrice = priceFen > 0 && priceFen % 10 === 0;
+          await client.query("update recharge_packages set points=$2,active=case when $3 then active else false end where id=$1", [pack.id, validPrice ? priceFen / 10 : Number(pack.points) * 5, validPrice]);
+        }
+      }
       await client.query("insert into schema_migrations(version) values($1)", [migration.version]);
       await client.query("commit");
     } catch (error) {

@@ -1,11 +1,11 @@
 # WorkBuddy 图片 MCP 商业化平台
 
-这是只面向 WorkBuddy 的图片生成服务。用户通过邮箱登录网站，领取或充值生成额度，创建个人 MCP Key，再用 Windows 安装器把本地图片 bridge 合并进 WorkBuddy 配置。
+这是只面向 WorkBuddy 的图片生成服务。用户通过邮箱登录网站，领取或充值积分，创建个人 MCP Key，再用 Windows 安装器把本地图片 bridge 合并进 WorkBuddy 配置。
 
 ## 组成
 
 - `src/platform/index.mjs`：网站与 HTTP API，负责登录、Key、钱包、订单和生成任务入队。
-- `src/platform/worker.mjs`：生成与对账 worker；调用 GPT.Ge 或 APIMart、保存临时图片、结算冻结额度。
+- `src/platform/worker.mjs`：生成与对账 worker；调用 GPT.Ge 或 APIMart、保存临时图片、结算冻结积分。
 - `src/index.mjs`：安装在用户电脑上的 stdio MCP bridge，只读取 `ALLOWED_IMAGE_ROOTS` 内的参考图。
 - `web/`：React/Vite 用户网站与管理后台。
 - `installer/`：包含 Node runtime 的 Inno Setup Windows 安装器。
@@ -15,7 +15,7 @@ PostgreSQL 是账户、钱包、账本、订单和任务状态的唯一事实来
 
 ## 计费规则
 
-- 新邮箱验证成功后发放 5 次额度；设备重复或同 IP 24 小时内超过 3 个验证账户时暂停自动奖励。
+- 符合防刷规则的新邮箱验证成功后赠送 20 积分；设备重复或同 IP 24 小时内超过 3 个验证账户时暂停自动奖励，待管理员核验后补发一次。首次充值不额外赠送。
 - 首笔审核通过的充值额外发放 10 次；唯一账本事件保证并发或重复审核不会重复发放。
 - 创建任务时原子执行“可用 -1、冻结 +1”。成功图片写入私有 COS 后才扣除冻结；明确失败释放；未知结果保持冻结。
 - 网络中断、上游可能已接单或 COS 上传结果不确定时不自动重提。对账 worker 查原任务或确定性 COS 对象；24 小时仍无法确认才进入人工复核。
@@ -65,7 +65,7 @@ APIMART_IMAGE_MODEL=gpt-image-2.5-sunburst
 GPT_GE_API_KEY=replace-me
 ```
 
-API 和 worker 直连 `api.apib.ai`；无需运行 Mihomo。APIMart 连通检查失败时，新生成请求在冻结额度前返回 503；已领取但尚未提交的任务会延后，不会自动切换 GPT.Ge。
+API 和 worker 直连 `api.apib.ai`；无需运行 Mihomo。APIMart 连通检查失败时，新生成请求在冻结积分前返回 503；已领取但尚未提交的任务会延后，不会自动切换 GPT.Ge。
 
 ```bash
 cp .env.example .env
@@ -93,6 +93,10 @@ docker compose -p workbuddy-image-mcp --env-file .env ps
 
 人工回退时，将 `IMAGE_PROVIDER=gpt_ge` 后重建 API 和 worker；历史任务仍按数据库记录的原供应商对账。网站、登录和充值不依赖图片供应商的连通状态。
 
+### 从生成次数切换到积分（数据库 v8）
+
+这次升级不能沿用上面的 `up -d --build` 一步重建。先备份并验证可恢复，再暂停旧 API 接单和旧 worker；确认 `generation_jobs` 没有 `queued`、`submitting`、`provider_pending`、`output_persisting`、`unknown` 或 `manual_review` 任务。只启动新版 API，让它单独完成 v8 迁移并等待 `/readyz` 正常，之后再启动新版 worker。迁移在 PostgreSQL 事务中持有任务表锁并复查活跃任务；发现活跃任务会回滚，不能强行迁移。新版启动后逐笔核对钱包、冻结和账本：旧 1 次只换算成 5 积分一次，历史订单快照也只换算一次。确认后再发布新版安装包与 Skill；公开注册入口在验收完成前保持关闭。生产操作细节见 `docs/operations/production-launch-checklist.md`。
+
 `/healthz` 只表示进程存活；`/readyz` 会检查 PostgreSQL 和钱包不变量。API 在钱包异常或未知任务积压达到门限时暂停接收新生成，但查询和后台复核仍可使用。
 
 部署前还需要：
@@ -114,7 +118,7 @@ docker compose -p workbuddy-image-mcp --env-file .env ps
 
 WorkBuddy 不能执行本机命令时，使用网站显示的腾讯云固定版本地址手动安装。个人 Key 只在登录后的“MCP Key”页面显示，不要把 Key 发到聊天或截图中。
 
-在 WorkBuddy 调用 `generate_image`；任务超过 90 秒时用 `get_generation` 查询，用 `get_balance` 查看可用与冻结额度。
+在 WorkBuddy 调用 `generate_image`；任务超过 90 秒时用 `get_generation` 查询，用 `get_balance` 查看可用、冻结积分与价目表。
 
 手动开发配置可使用 `IMAGE_API_KEY`；`IMAGE_GATEWAY_TOKEN` 仅为旧配置兼容：
 
@@ -134,17 +138,19 @@ WorkBuddy 不能执行本机命令时，使用网站显示的腾讯云固定版�
 }
 ```
 
-`generate_image` 支持文生图以及 1–4 张 PNG/JPEG/WebP 参考图；单张最多 4 MiB，总顺序由 `reference_image_paths` 决定。分辨率支持 `auto`、`1k`、`2k`、`4k`，默认 `1k`，当前每次成功交付统一扣 1 额度。
+`generate_image` 支持文生图以及 1–4 张 PNG/JPEG/WebP 参考图；单张最多 4 MiB，总顺序由 `reference_image_paths` 决定。分辨率支持 `auto`、`1k`、`2k`、`4k`，默认与 `auto` 均采用 `2k`；质量默认与 `auto` 均采用 `medium`。生成前冻结积分，成功交付才结算；每张参考图加 5 积分。
+
+积分价格版本 1：1K 的 low/medium/high 为 2/3/8 分；2K 为 3/5/15 分；4K 为 4/7/22 分。默认 2K medium 为每张 5 分。比例和输出格式不加价；1 元充值兑换 10 积分，充值积分永久有效。服务端 `get_balance` 返回当前价格，不依赖 Skill 计算。
 
 ## 安装器发布
 
-生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`、`WORKBUDDY_INSTALLER_VERSION=1.2.3`、腾讯云版本目录 `WORKBUDDY_RELEASE_BASE_URL` 和公开仓库 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。腾讯云作为默认下载地址，GitHub Release 保存同版本备份：
+生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`、`WORKBUDDY_INSTALLER_VERSION=1.2.4`、腾讯云版本目录 `WORKBUDDY_RELEASE_BASE_URL` 和公开仓库 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。腾讯云作为默认下载地址，GitHub Release 保存同版本备份：
 
 - `workbuddy-image-mcp.ps1`
-- `workbuddy-image-mcp-1.2.3.json`
-- `WorkBuddy-Image-MCP-Setup-1.2.3.exe`
+- `workbuddy-image-mcp-1.2.4.json`
+- `WorkBuddy-Image-MCP-Setup-1.2.4.exe`
 
-推送 `v1.2.3` 标签后，`.github/workflows/release.yml` 使用 Node.js 22 和 Inno Setup 只构建一次正式三件套，并运行打包后 bridge 握手与真实 EXE 初始化检查；三个文件完整、非空且清单哈希一致后才公开。随后从 GitHub Release 下载这三个原文件，不做修改或重新构建，人工上传到腾讯云 `releases/v1.2.3/` 目录。这样腾讯云和 GitHub 的 EXE 使用同一个 SHA-256。未签名 1.2.3 是公开内测版，Windows 可能显示“未知发布者”。
+推送 `v1.2.4` 标签后，`.github/workflows/release.yml` 使用 Node.js 22 和 Inno Setup 只构建一次正式三件套，并运行打包后 bridge 握手与真实 EXE 初始化检查；三个文件完整、非空且清单哈希一致后才公开。随后从 GitHub Release 下载这三个原文件，不做修改或重新构建，人工上传到腾讯云 `releases/v1.2.4/` 目录。这样腾讯云和 GitHub 的 EXE 使用同一个 SHA-256。未签名 1.2.4 是公开内测版，Windows 可能显示“未知发布者”。
 
 后端每 5 分钟检查一次腾讯云版本目录，校验 bootstrap 大于 1 KiB、EXE 大于 10 MiB、清单版本和下载地址一致。安装时再对实际 EXE 做 SHA-256 校验。检查未通过时，`GET /api/install-release/status` 返回未就绪，网站禁用提示词与下载操作，也不会签发新的 30 分钟一次性安装码。
 

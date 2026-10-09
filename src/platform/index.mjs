@@ -12,11 +12,11 @@ const providerAvailability = createProviderAvailability({ providerName: config.i
 await ensureBootstrapAdmin({ pool: runtime.pool, apiKeyService: runtime.apiKeyService, email: config.adminEmail, legacyGatewayToken: config.legacyGatewayToken });
 const app = createPlatformApp({ ...runtime, provider: config.imageProvider, readyCheck: async () => {
   await runtime.pool.query("select 1");
-  const invalid = await runtime.pool.query("select count(*)::int as count from wallets where available_credits<0 or held_credits<0");
+  const invalid = await runtime.pool.query("select count(*)::int as count from wallets where available_points<0 or held_points<0");
   return Number(invalid.rows[0].count) === 0;
-}, generationAdmissionCheck: async () => {
-  const invalid = await runtime.pool.query("select count(*)::int as count from wallets where available_credits<0 or held_credits<0");
-  const unresolved = await runtime.pool.query("select count(*)::int as count from generation_jobs where state in ('unknown','manual_review')");
+}, generationAdmissionCheck: async (client = runtime.pool) => {
+  const invalid = await client.query("select count(*)::int as count from wallets where available_points<0 or held_points<0");
+  const unresolved = await client.query("select count(*)::int as count from generation_jobs where state in ('unknown','manual_review')");
   if (Number(invalid.rows[0].count) !== 0 || Number(unresolved.rows[0].count) >= 100) return false;
   return providerAvailability.check();
 }, providerStatus: () => providerAvailability.snapshot(), publicRegistrationEnabled: config.publicRegistrationEnabled, cookieSecure: config.cookieSecure, publicOrigin: config.publicOrigin, installerVersion: config.installerVersion, logger: true });

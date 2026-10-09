@@ -41,7 +41,7 @@ export async function ensureBootstrapAdmin({ pool, apiKeyService, email, legacyG
   let user = (await pool.query("select * from users where email=$1", [normalized])).rows[0];
   if (!user) {
     user = (await pool.query("insert into users(email,status,role) values($1,'active','admin') returning *", [normalized])).rows[0];
-    await pool.query("insert into wallets(user_id,available_credits,held_credits) values($1,0,0) on conflict(user_id) do nothing", [user.id]);
+    await pool.query("insert into wallets(user_id,available_points,held_points) values($1,0,0) on conflict(user_id) do nothing", [user.id]);
   } else if (user.role !== "admin") {
     user = (await pool.query("update users set role='admin',status='active',updated_at=now() where id=$1 returning *", [user.id])).rows[0];
   }

@@ -12,7 +12,7 @@ async function setup(now = new Date("2026-09-13T12:00:00Z")) {
   const pool = new Pool();
   await runMigrations(pool);
   const user = (await pool.query("insert into users(email,status,role) values('reconcile@example.com','active','user') returning id")).rows[0];
-  await pool.query("insert into wallets(user_id,available_credits,held_credits) values($1,5,0)", [user.id]);
+  await pool.query("insert into wallets(user_id,available_points,held_points) values($1,5,0)", [user.id]);
   let requestSequence = 0;
   const jobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: Buffer.alloc(32, 7) }), requestIdFactory: () => `reconcile-${++requestSequence}`, now: () => now });
   return { pool, userId: user.id, jobs };
@@ -26,7 +26,7 @@ test("reconciliation captures an output already stored before a database settlem
   await worker.runOnce();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "succeeded");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 0 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 0 });
   await pool.end();
 });
 
@@ -76,7 +76,7 @@ test("reconciliation selects the provider recorded on each historical job", asyn
   await jobs.claimNext();
   await jobs.markProviderPending({ requestId: apimartJob.requestId, upstreamTaskId: "apimart-task" });
   await pool.query("update generation_jobs set state='failed' where request_id=$1", [apimartJob.requestId]);
-  await pool.query("update wallets set available_credits=5,held_credits=0 where user_id=$1", [userId]);
+  await pool.query("update wallets set available_points=5,held_points=0 where user_id=$1", [userId]);
   const gptJob = await jobs.enqueue({ userId, idempotencyKey: "historical-gpt", provider: "gpt_ge", request: { prompt: "dog" } });
   await jobs.claimNext();
   await jobs.markProviderPending({ requestId: gptJob.requestId, upstreamTaskId: "gpt-task" });
@@ -94,6 +94,7 @@ test("reconciliation selects the provider recorded on each historical job", asyn
 test("unknown task without upstream id remains held and moves to manual review after 24 hours", async () => {
   const now = new Date("2026-09-14T12:00:01Z");
   const { pool, userId, jobs } = await setup(now);
+  await pool.query("update wallets set available_points=10 where user_id=$1", [userId]);
   const job = await jobs.enqueue({ userId, idempotencyKey: "unknown", provider: "gpt_ge", request: { prompt: "cat" }, referenceObjectKeys: ["private/ref.png"] });
   await jobs.markUnknown({ requestId: job.requestId, errorCode: "provider_unreachable" });
   await pool.query("update generation_jobs set unknown_since='2026-09-13T12:00:00Z' where request_id=$1", [job.requestId]);
@@ -103,7 +104,7 @@ test("unknown task without upstream id remains held and moves to manual review a
   await worker.runOnce();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "manual_review");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 1 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 10 });
   assert.deepEqual(notified, [job.requestId]);
   assert.deepEqual(removed, ["private/ref.png"]);
   assert.equal((await pool.query("select encrypted_payload from generation_jobs where request_id=$1", [job.requestId])).rows[0].encrypted_payload, null);
@@ -123,7 +124,7 @@ test("reconciliation finds a deterministic output left by a pre-settlement crash
   await worker.runOnce();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "succeeded");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 0 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 0 });
   await pool.end();
 });
 
@@ -143,7 +144,7 @@ test("an unknown COS upload is captured if its deterministic object exists", asy
   await worker.runOnce();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "succeeded");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 0 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 0 });
   await pool.end();
 });
 
@@ -163,7 +164,7 @@ test("an interrupted submission without an output becomes unknown and is never r
   await worker.runOnce();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "unknown");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 1 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 5 });
   assert.equal(submitCalls, 0);
   await pool.end();
 });
@@ -186,7 +187,7 @@ test("a provider task still pending after 24 hours enters manual review", async 
   await worker.runOnce();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "manual_review");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 1 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 5 });
   assert.deepEqual(notified, [job.requestId]);
   await pool.end();
 });

@@ -91,3 +91,8 @@ test("APIMart downloads results through its injected transport with a 120 second
   assert.equal(image.mimeType, "image/png");
   assert.equal(calls[0].init.signal.constructor.name, "AbortSignal");
 });
+
+test("APIMart exposes only a valid task cost for private accounting", async () => {
+  const client = createApimartClient({ apiKey: "key", fetchImpl: async () => new Response(JSON.stringify({ data: { status: "completed", cost: 0.01325, result: { images: [{ url: ["https://upload.apimart.ai/image.png"] }] } } }), { status: 200 }) });
+  assert.equal((await client.getTask("task-1")).upstreamCost, 0.01325);
+});

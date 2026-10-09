@@ -14,12 +14,12 @@ visibility: private
 
 - 用户明确要求生成或编辑图片、检查 `xiaoye-image` 是否可用，或只想优化生图提示词时使用；`生成图片：` 前缀仍然有效，但不是必需的。
 - 用户只是在讨论创意、询问能力或比较方案时，不调用生图工具。用户只要优化提示词时，只返回提示词，不调用 `generate_image`。
-- 一张成品最多调用一次 `generate_image`。用户明确要求多张时按指定张数分别生成，每张成功交付各扣 1 额度；不自行增加张数。不要因超时、断线或结果不确定而重新提交；用返回的 `request_id` 调用 `get_generation` 查询原任务。
+- 一张成品最多调用一次 `generate_image`。用户明确要求多张时按指定张数分别生成，每张成功交付按服务器返回的 `points_cost` 扣积分；不自行增加张数。不要因超时、断线或结果不确定而重新提交；用返回的 `request_id` 调用 `get_generation` 查询原任务。
 
 ## 连接与安装
 
 1. 先检查本次 WorkBuddy 会话是否暴露 `xiaoye-image` 的 `generate_image`、`get_generation`、`get_balance`。只有在需要生图或用户要求检测连接时才检查，不必在普通聊天中反复检查。
-2. 工具存在时调用 `get_balance` 验证连接和可用额度；若账户额度不足，停止生图并告知用户。鉴权或连接失败时说明实际错误，不猜测已经安装成功。
+2. 工具存在时调用 `get_balance` 验证连接、可用积分和当前价目表；若积分不足，停止生图并告知用户。鉴权或连接失败时说明实际错误，不猜测已经安装成功。
 3. 工具不存在时，不猜本机 `command`、`args`、Key 或配置路径，也不手工拼接 `mcp.json`。引导用户登录 `https://xiaoyeai.cn` 创建个人 Key，复制网站当次生成的安装提示词交给 WorkBuddy；安装码有时效且一次性使用，不把安装码或固定安装命令写进本 Skill。安装后按网站提示重启 WorkBuddy、启用并信任 `xiaoye-image`，再用 `get_balance` 检查。
 4. 不展示或记录个人 Key、安装码、网关 Token、COS 凭证或完整签名下载 URL。
 
@@ -33,7 +33,9 @@ visibility: private
 
 ## MCP 参数与参考图
 
-- `generate_image` 必填 `prompt`；可选 `size`、`resolution`、`quality`、`output_format`、`reference_image_paths`。未指定时由 MCP 使用默认值：`size=1:1`、`resolution=1k`、`quality=medium`、`output_format=png`。不要宣称本 Skill 能自动切换服务器的模型。
+- `generate_image` 必填 `prompt`；可选 `size`、`resolution`、`quality`、`output_format`、`reference_image_paths`。未指定或显式 `auto` 时后端采用 `size=1:1`、`resolution=2k`、`quality=medium`、`output_format=png`。默认价为 5 积分，每张参考图另加 5 积分；各档实际价格以 `get_balance.price_table` 为准。不要宣称本 Skill 能自动切换服务器的模型。
+- 用户明确指定档位时照用；未指定时直接用服务端默认档。生成前可根据 `get_balance` 的价目表告知本次预计积分，不要求每张图再确认一次。即使绕过本 Skill，后端仍按同一价目表扣分。
+- 提示词最多 3000 字符。优化时保留用户原意并简洁表达，不为凑长度增加细节；用户已给完整提示词或要求原样使用时不要重写。
 - 用户指定的参数应使用 MCP 当前支持的值：`size` 为 `auto`、`1:1`、`3:2`、`2:3`、`4:3`、`3:4`、`5:4`、`4:5`、`16:9`、`9:16`、`2:1`、`1:2`、`3:1`、`1:3`、`21:9`；`resolution` 为 `auto`、`1k`、`2k`、`4k`；`quality` 为 `auto`、`low`、`medium`、`high`；格式为 `png`、`jpeg`、`webp`。无效值先请用户修正，不发起生图。
 - 参考图最多 4 张，保持用户指定顺序；只接受 PNG/JPEG/WebP，单张不超过 4 MiB。使用当前 WorkBuddy 实际授权读取目录中的本机绝对路径，不写死某个人的目录。附件路径不在授权目录时，可复制到授权目录中的新文件以完成本次生图；不得覆盖同名文件。无法取得合规本机路径时停止，不拿网络 URL 冒充路径。
 - 有参考图时统一传 `reference_image_paths` 数组；不要同时传单数 `reference_image_path`。无参考图时不传该字段。

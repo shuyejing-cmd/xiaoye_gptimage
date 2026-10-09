@@ -13,8 +13,8 @@ test("rejects unsupported first-version options", () => {
   assert.throws(() => parseGenerationRequest({ prompt: "fox", background: "transparent" }), /background/);
 });
 
-test("normalizes first-version defaults", () => {
+test("normalizes points-version defaults", () => {
   assert.deepEqual(parseGenerationRequest({ prompt: "fox" }), {
-    prompt: "fox", size: "1:1", resolution: "1k", quality: "medium", output_format: "png", n: 1
+    prompt: "fox", size: "1:1", resolution: "2k", quality: "medium", output_format: "png", n: 1
   });
 });

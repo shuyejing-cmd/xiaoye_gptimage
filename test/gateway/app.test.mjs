@@ -12,7 +12,7 @@ test("gateway accepts an authenticated JSON generation request", async () => {
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json(), { request_id: completed.requestId, status: "completed", image_url: completed.imageUrl, expires_at: completed.expiresAt });
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0], { request: { prompt: "orange cat", size: "1:1", resolution: "1k", quality: "medium", output_format: "png", n: 1 }, referenceImages: undefined });
+  assert.deepEqual(calls[0], { request: { prompt: "orange cat", size: "1:1", resolution: "2k", quality: "medium", output_format: "png", n: 1 }, referenceImages: undefined });
   await app.close();
 });
 

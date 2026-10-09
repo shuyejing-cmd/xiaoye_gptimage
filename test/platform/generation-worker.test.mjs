@@ -13,7 +13,7 @@ async function setup(provider, options = {}) {
   const pool = new Pool();
   await runMigrations(pool);
   const user = (await pool.query("insert into users(email,status,role) values('worker@example.com','active','user') returning id")).rows[0];
-  await pool.query("insert into wallets(user_id,available_credits,held_credits) values($1,5,0)", [user.id]);
+  await pool.query("insert into wallets(user_id,available_points,held_points) values($1,$2,0)", [user.id, options.points ?? 5]);
   let id = 0;
   const cipher = createPayloadCipher({ key: Buffer.alloc(32, 9) });
   const jobs = createGenerationJobs({ pool, cipher, requestIdFactory: () => `worker-${++id}`, now: () => new Date("2026-09-13T00:00:00Z") });
@@ -30,7 +30,7 @@ test("worker captures one credit only after persisting a verified provider resul
   await worker.runNext();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "succeeded");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 0 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 0 });
   assert.equal(stored.length, 1);
   await pool.end();
 });
@@ -43,7 +43,7 @@ test("worker reads all private reference objects and removes them after success"
     getReference: async (key) => ({ buffer: Buffer.from(key), mimeType: "image/png", fileName: `${key}.png` }),
     remove: async (key) => removed.push(key)
   };
-  const { pool, userId, jobs, worker } = await setup(provider, { inputStore });
+  const { pool, userId, jobs, worker } = await setup(provider, { inputStore, points: 15 });
   await jobs.enqueue({ userId, idempotencyKey: "references", provider: "gpt_ge", request: { prompt: "cat" }, referenceObjectKeys: ["ref-a", "ref-b"] });
   await worker.runNext();
   assert.equal(seen[0].length, 2);
@@ -58,7 +58,7 @@ test("explicit provider rejection releases the credit", async () => {
   await worker.runNext();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "failed");
-  assert.deepEqual(saved.wallet, { availableCredits: 5, heldCredits: 0 });
+  assert.deepEqual(saved.wallet, { availablePoints: 5, heldPoints: 0 });
   await pool.end();
 });
 
@@ -71,7 +71,7 @@ test("ambiguous submission failure keeps the credit frozen without retrying", as
   await worker.runNext();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "unknown");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 1 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 5 });
   assert.equal(calls, 1);
   await pool.end();
 });
@@ -93,7 +93,7 @@ test("a database failure after output upload does not release the held credit", 
   assert.equal(result.state, "output_persisting");
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "submitting");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 1 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 5 });
   assert.equal(stored.length, 1);
   await pool.end();
 });
@@ -115,7 +115,7 @@ test("a database failure after provider acceptance keeps the charge held", async
   assert.equal(result.state, "unknown");
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "unknown");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 1 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 5 });
   await pool.end();
 });
 
@@ -132,7 +132,7 @@ test("an unavailable asynchronous provider defers the job before submitting with
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(result.state, "queued");
   assert.equal(saved.state, "queued");
-  assert.deepEqual(saved.wallet, { availableCredits: 4, heldCredits: 1 });
+  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 5 });
   assert.equal(submitCalls, 0);
   await pool.end();
 });
@@ -148,7 +148,7 @@ test("an asynchronous provider receives 30 minute COS URLs for all reference ima
   const inputStore = {
     getSignedReference: async (key, expires) => { signed.push([key, expires]); return `https://cos.example/${key}?signature=secret`; }
   };
-  const { pool, userId, jobs, worker } = await setup(provider, { inputStore });
+  const { pool, userId, jobs, worker } = await setup(provider, { inputStore, points: 15 });
   await jobs.enqueue({ userId, idempotencyKey: "async-refs", provider: "apimart", request: { prompt: "edit" }, referenceObjectKeys: ["ref-a", "ref-b"] });
   await worker.runNext();
   assert.deepEqual(signed, [["ref-a", 1800], ["ref-b", 1800]]);

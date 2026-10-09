@@ -1,5 +1,6 @@
 import { AppError } from "../../shared/errors.mjs";
 import { withTransaction } from "../db/pool.mjs";
+import { quoteGeneration } from "../billing/points-pricing.mjs";
 
 function publicJob(job, wallet) {
   return {
@@ -13,8 +14,13 @@ function publicJob(job, wallet) {
     outputObjectKey: job.output_object_key,
     outputMimeType: job.output_mime_type,
     errorCode: job.error_code,
+    pointsCost: Number(job.points_cost),
+    priceVersion: Number(job.price_version),
+    resolution: job.resolution,
+    quality: job.quality,
+    referenceCount: Number(job.reference_count),
     completedAt: job.completed_at,
-    wallet: wallet ? { availableCredits: Number(wallet.available_credits), heldCredits: Number(wallet.held_credits) } : undefined
+    wallet: wallet ? { availablePoints: Number(wallet.available_points), heldPoints: Number(wallet.held_points) } : undefined
   };
 }
 
@@ -36,17 +42,18 @@ export function createGenerationJobs({ pool, cipher, requestIdFactory, now = () 
         if (beforeCreate) await beforeCreate(client);
         const active = await client.query("select count(*)::int as count from generation_jobs where user_id=$1 and state in ('queued','submitting','provider_pending','output_persisting','unknown')", [userId]);
         if (Number(active.rows[0].count) >= 1) throw new AppError({ code: "generation_concurrency_limit", message: "已有图片正在生成，请完成后再发起新任务", httpStatus: 429 });
+        const quote = quoteGeneration(request, referenceObjectKeys.length);
         const wallet = await lockWallet(client, userId);
-        if (Number(wallet.available_credits) < 1) throw new AppError({ code: "insufficient_credits", message: "生成额度不足，请先充值", httpStatus: 402 });
+        if (Number(wallet.available_points) < quote.pointsCost) throw new AppError({ code: "insufficient_points", message: "积分不足，请先充值", httpStatus: 402 });
         const requestId = requestIdFactory();
-        const encryptedPayload = cipher.encrypt({ request, referenceObjectKeys });
+        const encryptedPayload = cipher.encrypt({ request: quote.request, referenceObjectKeys });
         const job = (await client.query(
-          "insert into generation_jobs(request_id,user_id,idempotency_key,state,provider,encrypted_payload,available_at,created_at,updated_at) values($1,$2,$3,'queued',$4,$5,$6,$6,$6) returning *",
-          [requestId, userId, idempotencyKey, provider, encryptedPayload, now()]
+          "insert into generation_jobs(request_id,user_id,idempotency_key,state,provider,encrypted_payload,points_cost,price_version,resolution,quality,reference_count,available_at,created_at,updated_at) values($1,$2,$3,'queued',$4,$5,$6,$7,$8,$9,$10,$11,$11,$11) returning *",
+          [requestId, userId, idempotencyKey, provider, encryptedPayload, quote.pointsCost, quote.priceVersion, quote.request.resolution, quote.request.quality, quote.referenceCount, now()]
         )).rows[0];
-        await client.query("update wallets set available_credits=$2,held_credits=$3,version=version+1,updated_at=$4 where user_id=$1", [userId, Number(wallet.available_credits) - 1, Number(wallet.held_credits) + 1, now()]);
-        await client.query("insert into credit_holds(user_id,generation_id,amount,state,created_at) values($1,$2,1,'held',$3)", [userId, job.id, now()]);
-        await client.query("insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id,created_at) values($1,'hold',-1,'generation',$2,$3)", [userId, String(job.id), now()]);
+        await client.query("update wallets set available_points=$2,held_points=$3,version=version+1,updated_at=$4 where user_id=$1", [userId, Number(wallet.available_points) - quote.pointsCost, Number(wallet.held_points) + quote.pointsCost, now()]);
+        await client.query("insert into credit_holds(user_id,generation_id,points_amount,state,created_at) values($1,$2,$3,'held',$4)", [userId, job.id, quote.pointsCost, now()]);
+        await client.query("insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id,created_at) values($1,'hold',$2,'generation',$3,$4)", [userId, -quote.pointsCost, String(job.id), now()]);
           return publicJob(job);
         });
       } catch (error) {
@@ -58,8 +65,8 @@ export function createGenerationJobs({ pool, cipher, requestIdFactory, now = () 
       }
     },
 
-    markOutputPersisting({ requestId, objectKey, mimeType }) {
-      return pool.query("update generation_jobs set state='output_persisting',output_object_key=$2,output_mime_type=$3,updated_at=$4 where request_id=$1 and state not in ('succeeded','failed')", [requestId, objectKey, mimeType, now()]);
+    markOutputPersisting({ requestId, objectKey, mimeType, upstreamCost = null }) {
+      return pool.query("update generation_jobs set state='output_persisting',output_object_key=$2,output_mime_type=$3,upstream_cost_amount=coalesce($4,upstream_cost_amount),updated_at=$5 where request_id=$1 and state not in ('succeeded','failed')", [requestId, objectKey, mimeType, upstreamCost, now()]);
     },
 
     markProviderPending({ requestId, upstreamTaskId }) {
@@ -85,13 +92,15 @@ export function createGenerationJobs({ pool, cipher, requestIdFactory, now = () 
         const job = (await client.query("select * from generation_jobs where request_id=$1 for update", [requestId])).rows[0];
         if (!job) throw new AppError({ code: "generation_not_found", message: "生成任务不存在", httpStatus: 404 });
         if (job.state === "succeeded") return publicJob(job);
+        if (job.state === "failed") throw new AppError({ code: "generation_already_failed", message: "已退款任务不能再标记成功", httpStatus: 409 });
         if (!job.output_object_key) throw new AppError({ code: "output_not_persisted", message: "生成结果尚未可靠保存", httpStatus: 409 });
         const hold = (await client.query("select * from credit_holds where generation_id=$1 for update", [job.id])).rows[0];
-        if (hold?.state === "held") {
+        if (hold?.state !== "held") throw new AppError({ code: "points_hold_not_held", message: "任务积分冻结状态异常，不能确认成功", httpStatus: 409 });
+        {
           const wallet = await lockWallet(client, job.user_id);
-          await client.query("update wallets set held_credits=$2,version=version+1,updated_at=$3 where user_id=$1", [job.user_id, Number(wallet.held_credits) - Number(hold.amount), now()]);
+          await client.query("update wallets set held_points=$2,version=version+1,updated_at=$3 where user_id=$1", [job.user_id, Number(wallet.held_points) - Number(hold.points_amount), now()]);
           await client.query("update credit_holds set state='captured',settled_at=$2 where id=$1", [hold.id, now()]);
-          await client.query("insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id,created_at) values($1,'capture',$2,'generation',$3,$4)", [job.user_id, -Number(hold.amount), String(job.id), now()]);
+          await client.query("insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id,created_at) values($1,'capture',$2,'generation',$3,$4)", [job.user_id, -Number(hold.points_amount), String(job.id), now()]);
         }
         const saved = (await client.query("update generation_jobs set state='succeeded',encrypted_payload=null,completed_at=$2,updated_at=$2 where id=$1 returning *", [job.id, now()])).rows[0];
         return publicJob(saved);
@@ -107,9 +116,9 @@ export function createGenerationJobs({ pool, cipher, requestIdFactory, now = () 
         const hold = (await client.query("select * from credit_holds where generation_id=$1 for update", [job.id])).rows[0];
         if (hold?.state === "held") {
           const wallet = await lockWallet(client, job.user_id);
-          await client.query("update wallets set available_credits=$2,held_credits=$3,version=version+1,updated_at=$4 where user_id=$1", [job.user_id, Number(wallet.available_credits) + Number(hold.amount), Number(wallet.held_credits) - Number(hold.amount), now()]);
+          await client.query("update wallets set available_points=$2,held_points=$3,version=version+1,updated_at=$4 where user_id=$1", [job.user_id, Number(wallet.available_points) + Number(hold.points_amount), Number(wallet.held_points) - Number(hold.points_amount), now()]);
           await client.query("update credit_holds set state='released',settled_at=$2 where id=$1", [hold.id, now()]);
-          await client.query("insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id,created_at) values($1,'release',$2,'generation',$3,$4)", [job.user_id, Number(hold.amount), String(job.id), now()]);
+          await client.query("insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id,created_at) values($1,'release',$2,'generation',$3,$4)", [job.user_id, Number(hold.points_amount), String(job.id), now()]);
         }
         const saved = (await client.query("update generation_jobs set state='failed',error_code=$2,encrypted_payload=null,completed_at=$3,updated_at=$3 where id=$1 returning *", [job.id, errorCode, now()])).rows[0];
         return publicJob(saved);
@@ -134,7 +143,7 @@ export function createGenerationJobs({ pool, cipher, requestIdFactory, now = () 
     },
 
     async getForUser({ userId, requestId }) {
-      const result = await pool.query("select j.*,w.available_credits,w.held_credits from generation_jobs j join wallets w on w.user_id=j.user_id where j.request_id=$1 and j.user_id=$2", [requestId, userId]);
+      const result = await pool.query("select j.*,w.available_points,w.held_points from generation_jobs j join wallets w on w.user_id=j.user_id where j.request_id=$1 and j.user_id=$2", [requestId, userId]);
       if (!result.rowCount) throw new AppError({ code: "generation_not_found", message: "生成任务不存在", httpStatus: 404 });
       const row = result.rows[0];
       return publicJob(row, row);

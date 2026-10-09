@@ -24,6 +24,16 @@ test("gpt.ge text generation decodes and verifies its Base64 image response", as
   assert.equal(result.mimeType, "image/png");
 });
 
+test("gpt.ge maps billed resolution to the actual requested size", async () => {
+  const seen = [];
+  const client = createGptGeClient({ apiKey: "key", fetchImpl: async (_url, init) => {
+    seen.push(JSON.parse(init.body).size);
+    return new Response(JSON.stringify({ data: [{ b64_json: ONE_PIXEL_PNG.toString("base64") }] }), { status: 200 });
+  } });
+  for (const resolution of ["1k", "2k", "4k"]) await client.generate({ request: { prompt: "cat", size: "1:1", resolution, quality: "medium", output_format: "png" } });
+  assert.deepEqual(seen, ["1024x1024", "2048x2048", "4096x4096"]);
+});
+
 test("gpt.ge reference generation downloads its URL result into verified image bytes", async () => {
   let fetches = 0;
   const client = createGptGeClient({

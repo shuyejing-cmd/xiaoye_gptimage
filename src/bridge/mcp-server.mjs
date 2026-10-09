@@ -7,7 +7,7 @@ import { normalizeReferenceImagePaths } from "./reference-images.mjs";
 export function createBridgeServer({ allowedRoots, gatewayClient }) {
   const server = new McpServer({ name: "workbuddy-image-bridge", version: "0.1.0" });
   server.registerTool("generate_image", {
-    description: "Generate one image. Pass one to four attached WorkBuddy image paths as reference_image_paths; reference_image_path remains supported for one image.",
+    description: "Generate one image. Default is 2K medium (5 points); each reference image adds 5 points. Use get_balance for the current server price table. Pass one to four local reference_image_paths; reference_image_path remains supported for one image.",
     inputSchema: {
       prompt: z.string().min(1),
       reference_image_path: z.string().optional(),
@@ -38,7 +38,7 @@ export function createBridgeServer({ allowedRoots, gatewayClient }) {
     }
   });
   server.registerTool("get_balance", {
-    description: "Get the available and currently held image generation credits.",
+    description: "Get available and held points, the current server price table, and generation defaults.",
     inputSchema: {}
   }, async () => {
     try {

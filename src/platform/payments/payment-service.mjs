@@ -13,7 +13,7 @@ function proofMime(buffer) {
 }
 
 function publicOrder(row) {
-  return { id: row.id, orderNo: row.order_no, packageName: row.package_name, priceFen: Number(row.price_fen), credits: Number(row.credits), state: row.state, note: row.note, expiresAt: row.expires_at };
+  return { id: row.id, orderNo: row.order_no, packageName: row.package_name, priceFen: Number(row.price_fen), points: Number(row.points), state: row.state, note: row.note, expiresAt: row.expires_at };
 }
 
 export function createPaymentService({ pool, proofStore, paymentProvider, now = () => new Date(), orderNoFactory }) {
@@ -45,8 +45,8 @@ export function createPaymentService({ pool, proofStore, paymentProvider, now = 
       if (!pack) throw new AppError({ code: "recharge_package_not_found", message: "充值套餐不存在或已下架", httpStatus: 404 });
       const createdAt = now();
       const row = (await pool.query(
-        "insert into recharge_orders(order_no,user_id,package_id,provider,package_name,price_fen,credits,state,created_at,updated_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,'created',$8,$8,$9) returning *",
-        [orderNoFactory(), userId, packageId, provider.name, pack.name, pack.price_fen, pack.credits, createdAt, new Date(createdAt.getTime() + DAY_MS)]
+        "insert into recharge_orders(order_no,user_id,package_id,provider,package_name,price_fen,points,state,created_at,updated_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,'created',$8,$8,$9) returning *",
+        [orderNoFactory(), userId, packageId, provider.name, pack.name, pack.price_fen, pack.points, createdAt, new Date(createdAt.getTime() + DAY_MS)]
       )).rows[0];
       return publicOrder(row);
     },
@@ -79,12 +79,8 @@ export function createPaymentService({ pool, proofStore, paymentProvider, now = 
           if (order.state !== "proof_submitted") throw new AppError({ code: "recharge_order_not_reviewable", message: "充值订单尚未提交有效凭证", httpStatus: 409 });
           await client.query("select id from users where id=$1 for update", [order.user_id]);
           const wallet = (await client.query("select * from wallets where user_id=$1 for update", [order.user_id])).rows[0];
-          const previous = await client.query("select count(*)::int as count from recharge_orders where user_id=$1 and state='approved' and id<>$2", [order.user_id, order.id]);
-          const firstRecharge = Number(previous.rows[0].count) === 0;
-          const total = Number(order.credits) + (firstRecharge ? 10 : 0);
-          await client.query("update wallets set available_credits=$2,version=version+1,updated_at=$3 where user_id=$1", [order.user_id, Number(wallet.available_credits) + total, now()]);
-          await client.query("insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id,created_at) values($1,'recharge',$2,'recharge_order',$3,$4)", [order.user_id, order.credits, String(order.id), now()]);
-          if (firstRecharge) await client.query("insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id,created_at) values($1,'first_recharge_bonus',10,'user',$2,$3)", [order.user_id, String(order.user_id), now()]);
+          await client.query("update wallets set available_points=$2,version=version+1,updated_at=$3 where user_id=$1", [order.user_id, Number(wallet.available_points) + Number(order.points), now()]);
+          await client.query("insert into ledger_entries(user_id,event_type,amount,reference_type,reference_id,created_at) values($1,'recharge',$2,'recharge_order',$3,$4)", [order.user_id, order.points, String(order.id), now()]);
           const saved = (await client.query("update recharge_orders set state='approved',reviewed_by=$2,reviewed_at=$3,updated_at=$3 where id=$1 returning *", [order.id, adminId, now()])).rows[0];
           await client.query("insert into audit_events(actor_user_id,action,target_type,target_id,reason,created_at) values($1,'approve_recharge','recharge_order',$2,'管理员确认付款到账',$3)", [adminId, String(order.id), now()]);
           return publicOrder(saved);
