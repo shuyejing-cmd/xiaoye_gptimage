@@ -2,13 +2,22 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { formatInstallExpiry, installationPromptStatus, installReleaseView } from "./mcp-config.js";
 import { requestHeaders } from "./http-options.js";
 import { createKeyWithPrompt, isPromptExpired, resolveSelectedKeyId } from "./key-page-flow.js";
+import { adminUsersPath, clearPendingPointAddition, createAdminLoadTracker, loadPendingPointAddition, pendingAdditionKey, pointAdditionRequest, preparePointAddition, retainUnconfirmedPointAddition, savePendingPointAddition } from "./admin-user-flow.js";
 import profileAvatar from "./assets/profile-avatar.png";
 
 async function api(path, options = {}) {
   const response = await fetch(path, { credentials: "same-origin", ...options, headers: requestHeaders(options) });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error?.message || "请求失败，请稍后重试");
+  if (!response.ok) {
+    const error = new Error(body.error?.message || "请求失败，请稍后重试");
+    error.httpStatus = response.status;
+    throw error;
+  }
   return body;
+}
+
+function pointAdditionStorage() {
+  try { return window.localStorage; } catch { return null; }
 }
 
 const Icon = ({ name }) => {
@@ -218,15 +227,70 @@ function Install() {
 
 function Admin() {
   const [orders, setOrders] = useState([]), [users, setUsers] = useState([]), [reviews, setReviews] = useState([]), [adminPackages, setAdminPackages] = useState([]), [adminChannels, setAdminChannels] = useState([]), [metrics, setMetrics] = useState(null), [error, setError] = useState(""), [loading, setLoading] = useState(true), [busy, setBusy] = useState("");
-  const load = useCallback(() => Promise.all([api("/api/admin/recharge-orders"),api("/api/admin/users"),api("/api/admin/manual-reviews"),api("/api/admin/recharge-packages"),api("/api/admin/payment-channels"),api("/api/admin/metrics")]).then(([a,b,c,d,e,f])=>{setOrders(a.orders);setUsers(b.users);setReviews(c.generations);setAdminPackages(d.packages);setAdminChannels(e.channels);setMetrics(f)}).catch(e=>setError(e.message)).finally(()=>setLoading(false)),[]);
-  useEffect(()=>{load()},[load]);
+  const [userSearch, setUserSearch] = useState(""), [activeUserSearch, setActiveUserSearch] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState(null), [addAmount, setAddAmount] = useState(""), [addReason, setAddReason] = useState(""), [notice, setNotice] = useState("");
+  const [pendingAddition, setPendingAddition] = useState(() => loadPendingPointAddition(pointAdditionStorage()));
+  const addFormRef = useRef(null);
+  const addInFlightRef = useRef(false), loadTrackerRef = useRef(createAdminLoadTracker()), activeUserSearchRef = useRef("");
+  const selectedUser = users.find(user => String(user.id) === String(selectedUserId));
+  const previewAmount = Number(addAmount);
+  const previewAvailable = selectedUser && Number.isSafeInteger(previewAmount) && previewAmount > 0 && Number.isSafeInteger(Number(selectedUser.available_points) + previewAmount) ? Number(selectedUser.available_points) + previewAmount : null;
+  const load = useCallback((search = activeUserSearchRef.current) => {
+    const requestNumber = loadTrackerRef.current.next();
+    return Promise.all([api("/api/admin/recharge-orders"),api(adminUsersPath(search)),api("/api/admin/manual-reviews"),api("/api/admin/recharge-packages"),api("/api/admin/payment-channels"),api("/api/admin/metrics")]).then(([a,b,c,d,e,f])=>{
+      if (!loadTrackerRef.current.isCurrent(requestNumber)) return;
+      setOrders(a.orders);setUsers(b.users);setReviews(c.generations);setAdminPackages(d.packages);setAdminChannels(e.channels);setMetrics(f);
+    }).catch(e=>{if(loadTrackerRef.current.isCurrent(requestNumber))setError(e.message)}).finally(()=>{if(loadTrackerRef.current.isCurrent(requestNumber))setLoading(false)});
+  },[]);
+  useEffect(()=>{activeUserSearchRef.current=activeUserSearch;load(activeUserSearch)},[load,activeUserSearch]);
+  useEffect(() => {
+    const updatePending = event => { if (event.key === pendingAdditionKey) setPendingAddition(loadPendingPointAddition(pointAdditionStorage())); };
+    window.addEventListener("storage", updatePending);
+    return () => window.removeEventListener("storage", updatePending);
+  }, []);
+  useEffect(() => { if (selectedUserId) addFormRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [selectedUserId]);
+  const searchUsers = event => { event.preventDefault(); loadTrackerRef.current.next(); setSelectedUserId(null); setUsers([]); setNotice(""); setError(""); setLoading(true); const query=userSearch.trim(); activeUserSearchRef.current=query; if(query===activeUserSearch) load(query); else setActiveUserSearch(query); };
+  const clearUserSearch = () => { setUserSearch(""); setSelectedUserId(null); setNotice(""); setError(""); if(activeUserSearch){loadTrackerRef.current.next();activeUserSearchRef.current="";setUsers([]);setLoading(true);setActiveUserSearch("")} };
+  const selectUser = user => { setSelectedUserId(user.id); setAddAmount(""); setAddReason(""); setNotice(""); setError(""); };
+  const submitPointAddition = async (request, isRetry = false) => {
+    if (addInFlightRef.current) return;
+    addInFlightRef.current = true;
+    setBusy(`user-${request.userId}`); setError(""); setNotice("");
+    try {
+      await api(`/api/admin/users/${request.userId}/adjust-points`, { method: "POST", headers: { "idempotency-key": request.key }, body: JSON.stringify({ amount: request.amount, reason: request.reason }) });
+      setPendingAddition(clearPendingPointAddition(pointAdditionStorage(), request));
+      setNotice(`已确认用户 ${request.userId} 增加 ${request.amount} 积分`);
+      setSelectedUserId(null); setAddAmount(""); setAddReason("");
+      await load();
+    } catch (cause) {
+      if (!retainUnconfirmedPointAddition({ isRetry, httpStatus: cause.httpStatus })) {
+        setPendingAddition(clearPendingPointAddition(pointAdditionStorage(), request));
+        setError(cause.message);
+      } else setError(cause.httpStatus === 401 ? "登录已失效。重新登录后请用原请求重试确认；这笔加分仍会保留。" : "加分结果暂时无法确认。请使用下方“重试确认”，不要重新创建这笔加分。");
+    }
+    finally { addInFlightRef.current=false; setBusy(""); }
+  };
+  const addPoints = event => {
+    event.preventDefault();
+    if (!selectedUser || pendingAddition || addInFlightRef.current) return;
+    try {
+      const persisted = loadPendingPointAddition(pointAdditionStorage());
+      if (persisted) { setPendingAddition(persisted); throw new Error("还有一笔未确认的加分，请先重试确认"); }
+      const addition = preparePointAddition(selectedUser, addAmount, addReason);
+      const request = pointAdditionRequest(null, selectedUser.id, addition, () => crypto.randomUUID());
+      if (!pointAdditionStorage()) throw new Error("浏览器暂时无法保存加分请求，请允许临时存储后重试");
+      savePendingPointAddition(pointAdditionStorage(), request);
+      setPendingAddition(request);
+      void submitPointAddition(request);
+    } catch (cause) { setError(cause.message); }
+  };
   const reviewOrder = async (id, action) => { const reason = action === "reject" ? prompt("填写驳回原因") : undefined; if(action === "reject" && !reason)return; setBusy(`order-${id}`);setError("");try{await api(`/api/admin/recharge-orders/${id}/${action}`,{method:"POST",body:JSON.stringify({reason})});await load()}catch(e){setError(e.message)}finally{setBusy("")} };
   const resolveJob = async (id, outcome) => { const reason=prompt("填写人工复核依据");if(!reason)return;setBusy(`job-${id}`);setError("");try{await api(`/api/admin/manual-reviews/${id}/resolve`,{method:"POST",body:JSON.stringify({outcome,reason})});await load()}catch(e){setError(e.message)}finally{setBusy("")} };
   const createPackage = async event => {event.preventDefault();const form=new FormData(event.currentTarget);setBusy("package");setError("");try{await api("/api/admin/recharge-packages",{method:"POST",body:JSON.stringify({name:form.get("name"),price_fen:Math.round(Number(form.get("price"))*100)})});event.currentTarget.reset();await load()}catch(e){setError(e.message)}finally{setBusy("")}};
   const createChannel = async event => {event.preventDefault();const raw=new FormData(event.currentTarget);const body=new FormData();body.append("name",raw.get("name"));body.append("instructions",raw.get("instructions"));body.append("image",raw.get("image"));setBusy("channel");setError("");try{await api("/api/admin/payment-channels",{method:"POST",body});event.currentTarget.reset();await load()}catch(e){setError(e.message)}finally{setBusy("")}};
   const togglePackage = async item => {setBusy(`package-${item.id}`);try{await api(`/api/admin/recharge-packages/${item.id}`,{method:"PATCH",body:JSON.stringify({active:!item.active})});await load()}catch(e){setError(e.message)}finally{setBusy("")}};
   const toggleChannel = async item => {setBusy(`channel-${item.id}`);try{await api(`/api/admin/payment-channels/${item.id}`,{method:"PATCH",body:JSON.stringify({active:!item.active})});await load()}catch(e){setError(e.message)}finally{setBusy("")}};
-  const adjust = async user => {const amount=Number(prompt(`为 ${user.email} 调整多少积分？可填写负数。`));if(!Number.isInteger(amount)||amount===0)return;const reason=prompt("填写调账原因");if(!reason)return;setBusy(`user-${user.id}`);setError("");try{await api(`/api/admin/users/${user.id}/adjust-points`,{method:"POST",headers:{"idempotency-key":crypto.randomUUID()},body:JSON.stringify({amount,reason})});await load()}catch(e){setError(e.message)}finally{setBusy("")}};
+  const adjust = async user => {if(pendingAddition)return;const amount=Number(prompt(`为 ${user.email} 调整多少积分？可填写负数。`));if(!Number.isInteger(amount)||amount===0)return;const reason=prompt("填写调账原因");if(!reason)return;setBusy(`user-${user.id}`);setError("");try{await api(`/api/admin/users/${user.id}/adjust-points`,{method:"POST",headers:{"idempotency-key":crypto.randomUUID()},body:JSON.stringify({amount,reason})});await load()}catch(e){setError(e.message)}finally{setBusy("")}};
   const changeStatus = async user => {const status=user.status==="active"?"suspended":"active";const reason=prompt(status==="suspended"?`填写停用 ${user.email} 的原因`:`填写恢复 ${user.email} 的原因`);if(!reason)return;setBusy(`user-${user.id}`);setError("");try{await api(`/api/admin/users/${user.id}`,{method:"PATCH",body:JSON.stringify({status,reason})});await load()}catch(e){setError(e.message)}finally{setBusy("")}};
   const pendingOrders=orders.filter(x=>x.state==="proof_submitted");
   return <section className="page"><header className="page-head"><h1>运营与复核</h1><p>所有审核、调账和异常任务处理都会记录操作人、时间、对象和原因。</p></header>{error&&<p className="error" role="alert">{error}</p>}
@@ -234,7 +298,25 @@ function Admin() {
     <h2 className="section-title">套餐与收款码</h2><div className="admin-config"><form onSubmit={createPackage}><h3>新增固定套餐</h3><label>套餐名<input name="name" required/></label><label>金额（元）<input name="price" type="number" min="0.1" step="0.1" required/></label><button disabled={Boolean(busy)}>{busy==="package"?"正在保存…":"保存套餐"}</button></form><form onSubmit={createChannel}><h3>新增收款码</h3><label>渠道名<input name="name" required/></label><label>付款说明<input name="instructions"/></label><label>收款码图片<input name="image" type="file" accept="image/png,image/jpeg,image/webp" required/></label><button disabled={Boolean(busy)}>{busy==="channel"?"正在上传…":"保存收款码"}</button></form></div><div className="admin-list">{loading?<Loading/>:<>{adminPackages.map(item=><article key={`package-${item.id}`}><div><b>{item.name}</b><span>¥{(item.price_fen/100).toFixed(2)} · {item.points} 积分</span></div><Status value={item.active?"active":"revoked"}/><button disabled={Boolean(busy)} onClick={()=>togglePackage(item)}>{item.active?"下架":"重新上架"}</button></article>)}{adminChannels.map(item=><article key={`channel-${item.id}`}><div><b>{item.name}</b><span>{item.instructions||"暂无付款说明"}</span></div><Status value={item.active?"active":"revoked"}/><button disabled={Boolean(busy)} onClick={()=>toggleChannel(item)}>{item.active?"停用":"启用"}</button></article>)}</>}</div>
     <h2 className="section-title">待审核充值</h2><div className="admin-list">{loading?<Loading/>:pendingOrders.map(o=><article key={o.id}><div><b>{o.email}</b><code>{o.order_no}</code><span>{o.package_name} · ¥{(o.price_fen/100).toFixed(2)} · {o.points} 积分</span></div>{o.proof_url&&<a href={o.proof_url} target="_blank" rel="noopener noreferrer">查看凭证</a>}<button disabled={Boolean(busy)} onClick={()=>reviewOrder(o.id,"approve")}>{busy===`order-${o.id}`?"正在处理…":"确认到账"}</button><button disabled={Boolean(busy)} className="danger-text" onClick={()=>reviewOrder(o.id,"reject")}>驳回</button></article>)}{!loading&&!pendingOrders.length&&<Empty>目前没有待审核订单。</Empty>}</div>
     <h2 className="section-title">异常任务</h2><div className="admin-list">{loading?<Loading/>:reviews.map(j=><article key={j.request_id}><div><code>{j.request_id}</code><span>{j.provider} · {j.error_code}</span></div><button disabled={Boolean(busy)} onClick={()=>resolveJob(j.request_id,"succeeded")}>{busy===`job-${j.request_id}`?"正在处理…":"确认成功扣费"}</button><button disabled={Boolean(busy)} onClick={()=>resolveJob(j.request_id,"failed")}>确认失败释放</button></article>)}{!loading&&!reviews.length&&<Empty>目前没有需要人工复核的任务。</Empty>}</div>
-    <h2 className="section-title">用户账户</h2>{loading?<Loading/>:<table><thead><tr><th>邮箱</th><th>状态</th><th>可用</th><th>冻结</th><th>操作</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td>{u.email}</td><td><Status value={u.status}/></td><td>{u.available_points}</td><td>{u.held_points}</td><td><button className="text-button" disabled={Boolean(busy)} onClick={()=>adjust(u)}>{busy===`user-${u.id}`?"处理中…":"人工调账"}</button> <button className="text-button" disabled={Boolean(busy)} onClick={()=>changeStatus(u)}>{u.status==="active"?"停用账户":"恢复账户"}</button></td></tr>)}</tbody></table>}
+    <h2 className="section-title">用户账户</h2>
+    <div className="admin-user-toolbar">
+      <form role="search" onSubmit={searchUsers}>
+        <label htmlFor="admin-user-email">按邮箱查找用户</label>
+        <input id="admin-user-email" type="search" value={userSearch} onChange={event=>setUserSearch(event.target.value)} placeholder="输入完整邮箱或其中一段" maxLength={254}/>
+        <button type="submit" disabled={Boolean(busy)}>查找</button>
+        {activeUserSearch&&<button type="button" className="text-button" disabled={Boolean(busy)} onClick={clearUserSearch}>清除</button>}
+      </form>
+      <p>{activeUserSearch ? `“${activeUserSearch}”的搜索结果` : "默认显示最近 200 位用户；搜索可查找更早的账户。"}</p>
+    </div>
+    {notice&&<p className="admin-point-notice" role="status">{notice}</p>}
+    {pendingAddition&&<div className="admin-point-pending" role="status"><p>有一笔加分尚未确认：用户 {pendingAddition.userId}，增加 {pendingAddition.amount} 积分。请先确认这笔操作，再创建新的加分。</p><button type="button" disabled={Boolean(busy)} onClick={()=>submitPointAddition(pendingAddition,true)}>{busy?"正在确认…":"重试确认同一笔"}</button></div>}
+    {selectedUser&&<form ref={addFormRef} className="admin-point-form" onSubmit={addPoints}>
+      <div className="admin-point-target"><h3>增加积分</h3><p>目标邮箱：<strong>{selectedUser.email}</strong></p><p>当前可用 {selectedUser.available_points} 积分 · 冻结 {selectedUser.held_points} 积分</p></div>
+      <label>增加数量<input type="number" min="1" step="1" inputMode="numeric" value={addAmount} onChange={event=>setAddAmount(event.target.value)} required/></label>
+      <label>加分原因<textarea value={addReason} onChange={event=>setAddReason(event.target.value)} maxLength={500} placeholder="例如：线下收款补分" required/></label>
+      <div className="admin-point-actions"><p>{previewAvailable===null?"输入数量后可预览余额":`按当前余额预计：${selectedUser.available_points} → ${previewAvailable}`}</p><button type="submit" disabled={Boolean(busy)||Boolean(pendingAddition)}>{pendingAddition?"请先确认上一笔":busy===`user-${selectedUser.id}`?"正在增加…":`确认给 ${selectedUser.email} 加分`}</button><button type="button" className="text-button" onClick={()=>setSelectedUserId(null)}>取消</button></div>
+    </form>}
+    {loading?<Loading/>:users.length?<div className="admin-users-table"><table><thead><tr><th>邮箱</th><th>注册时间</th><th>状态</th><th>可用积分</th><th>冻结积分</th><th>操作</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td>{u.email}</td><td>{new Date(u.created_at).toLocaleString("zh-CN")}</td><td><Status value={u.status}/></td><td>{u.available_points}</td><td>{u.held_points}</td><td><button className="text-button" disabled={Boolean(busy)||Boolean(pendingAddition)} onClick={()=>selectUser(u)}>增加积分</button> <button className="text-button" disabled={Boolean(busy)||Boolean(pendingAddition)} onClick={()=>adjust(u)}>{busy===`user-${u.id}`?"处理中…":"其他调账"}</button> <button className="text-button" disabled={Boolean(busy)} onClick={()=>changeStatus(u)}>{u.status==="active"?"停用账户":"恢复账户"}</button></td></tr>)}</tbody></table></div>:<Empty>没有找到符合条件的用户。</Empty>}
   </section>;
 }
 

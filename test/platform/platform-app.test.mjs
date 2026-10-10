@@ -13,6 +13,7 @@ import { createPlatformApp } from "../../src/platform/http/platform-app.mjs";
 
 async function setup({ publicRegistrationEnabled = true, cookieSecure = true, generationAdmissionCheck = async () => true, providerStatus = () => null, releaseService = { getStatus: async () => ({ ready: true, version: "1.2.0", bootstrap_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp.ps1", manifest_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp-1.2.0.json", installer_url: "https://github.com/owner/repository/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe" }) } } = {}) {
   const memory = newDb({ autoCreateForeignKeyIndices: true, noAstCoverageCheck: true });
+  memory.public.registerFunction({ name: "strpos", args: ["text", "text"], returns: "integer", implementation: (text, search) => text.indexOf(search) + 1 });
   const { Pool } = memory.adapters.createPg();
   const pool = new Pool();
   await runMigrations(pool);
@@ -298,6 +299,48 @@ test("website and admin APIs enforce sessions, roles, and order isolation", asyn
   const rejectedKey = await app.inject({ method: "GET", url: "/v1/account/balance", headers: { authorization: `Bearer ${keyTwo}` } });
   assert.equal(rejectedKey.statusCode, 401);
   assert.equal((await pool.query("select reason from audit_events where action='change_user_status' and target_id=$1", [String(two.body.user.id)])).rows[0].reason, "自动化冻结测试");
+  await app.close();
+  await pool.end();
+});
+
+test("admin email search finds an older account beyond the default list and preserves literal underscores", async () => {
+  const { pool, app, sent } = await setup();
+  const admin = await login(app, sent, "search-admin@example.com", "search-admin-browser");
+  const target = await login(app, sent, "archive_tag@example.com", "archive-target-browser");
+  await pool.query("update users set role='admin' where id=$1", [admin.body.user.id]);
+  await pool.query("update users set created_at=$2 where id=$1", [target.body.user.id, new Date("2020-01-02T03:04:05.000Z")]);
+  await pool.query("update wallets set available_points=37 where user_id=$1", [target.body.user.id]);
+  for (let index = 0; index < 201; index += 1) {
+    const email = index === 0 ? "archiveXtag@example.com" : `filler-${index}@example.com`;
+    const user = (await pool.query("insert into users(email,status,role) values($1,'active','user') returning id", [email])).rows[0];
+    await pool.query("insert into wallets(user_id,available_points,held_points) values($1,0,0)", [user.id]);
+  }
+  const headers = { cookie: admin.cookie };
+  const defaultList = await app.inject({ method: "GET", url: "/api/admin/users", headers });
+  assert.equal(defaultList.statusCode, 200, defaultList.body);
+  assert.equal(defaultList.json().users.some((user) => user.id === target.body.user.id), false);
+  const search = await app.inject({ method: "GET", url: "/api/admin/users?email=ARCHIVE_TAG", headers });
+  assert.equal(search.statusCode, 200, search.body);
+  assert.deepEqual(search.json().users.map((user) => ({ email: user.email, available: user.available_points, created: user.created_at })), [
+    { email: "archive_tag@example.com", available: 37, created: "2020-01-02T03:04:05.000Z" }
+  ]);
+  await app.close();
+  await pool.end();
+});
+
+test("retrying an acknowledged manual addition with its request key does not credit twice", async () => {
+  const { pool, app, sent } = await setup();
+  const admin = await login(app, sent, "credit-admin@example.com", "credit-admin-browser");
+  const recipient = await login(app, sent, "credit-user@example.com", "credit-user-browser");
+  await pool.query("update users set role='admin' where id=$1", [admin.body.user.id]);
+  const request = { method: "POST", url: `/api/admin/users/${recipient.body.user.id}/adjust-points`, headers: { cookie: admin.cookie, "idempotency-key": "same-manual-credit" }, payload: { amount: 12, reason: "线下收款" } };
+  const first = await app.inject(request);
+  const retry = await app.inject(request);
+  assert.equal(first.statusCode, 200, first.body);
+  assert.equal(retry.statusCode, 200, retry.body);
+  assert.equal(retry.json().available_points, 32);
+  assert.equal((await pool.query("select count(*)::int as count from ledger_entries where reference_id='same-manual-credit'")).rows[0].count, 1);
+  assert.equal((await pool.query("select count(*)::int as count from audit_events where action='adjust_wallet' and target_id=$1", [String(recipient.body.user.id)])).rows[0].count, 1);
   await app.close();
   await pool.end();
 });

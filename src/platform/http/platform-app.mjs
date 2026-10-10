@@ -295,7 +295,9 @@ export function createPlatformApp({
   });
   app.get("/api/admin/users", async (request) => {
     await adminUser(request);
-    const rows = await pool.query("select u.id,u.email,u.status,u.role,u.created_at,w.available_points,w.held_points from users u join wallets w on w.user_id=u.id order by u.created_at desc limit 200");
+    const email = String(request.query?.email || "").trim().toLowerCase();
+    if (email.length > 254) throw new AppError({ code: "invalid_user_search", message: "邮箱搜索内容过长", httpStatus: 400 });
+    const rows = await pool.query("select u.id,u.email,u.status,u.role,u.created_at,w.available_points,w.held_points from users u join wallets w on w.user_id=u.id where strpos(lower(u.email),$1) > 0 order by u.created_at desc limit 200", [email]);
     return { users: rows.rows };
   });
   app.patch("/api/admin/users/:id", async (request) => {
