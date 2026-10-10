@@ -17,7 +17,7 @@ export function loadPlatformConfig(env = process.env) {
   if (!new Set(["gpt_ge", "apimart"]).has(imageProvider)) throw new AppError({ code: "invalid_config", message: "IMAGE_PROVIDER must be gpt_ge or apimart", httpStatus: 500 });
   requireValues(env, ["GPT_GE_API_KEY", "APIMART_API_KEY"]);
   const publicOrigin = env.PUBLIC_ORIGIN || "https://xiaoyeai.cn";
-  const installerVersion = env.WORKBUDDY_INSTALLER_VERSION || "1.2.5";
+  const installerVersion = env.WORKBUDDY_INSTALLER_VERSION || "1.2.6";
   const releaseRepository = String(env.WORKBUDDY_RELEASE_REPOSITORY || "").trim() || null;
   const releaseBaseUrlValue = String(env.WORKBUDDY_RELEASE_BASE_URL || "").trim();
   let releaseBaseUrl = null;
@@ -34,6 +34,7 @@ export function loadPlatformConfig(env = process.env) {
     }
     releaseBaseUrl = releaseUrl.href.replace(/\/+$/, "");
   }
+  if (env.APIMART_IMAGE_MODEL && env.APIMART_IMAGE_MODEL !== "gpt-image-2.5-ext") throw new AppError({ code: "invalid_config", message: "APIMART_IMAGE_MODEL must be gpt-image-2.5-ext for this price version", httpStatus: 500 });
   return {
     databaseUrl: env.DATABASE_URL,
     authPepper: env.AUTH_PEPPER,
@@ -55,7 +56,7 @@ export function loadPlatformConfig(env = process.env) {
     apimart: {
       apiKey: env.APIMART_API_KEY,
       baseUrl: providerBaseUrl(env.APIMART_BASE_URL || "https://api.apib.ai/v1", "APIMART_BASE_URL"),
-      model: env.APIMART_IMAGE_MODEL || "gpt-image-2.5-sunburst"
+      model: env.APIMART_IMAGE_MODEL || "gpt-image-2.5-ext"
     },
     smtp: { host: env.SMTP_HOST, port: Number(env.SMTP_PORT || 465), secure: env.SMTP_SECURE !== "false", user: env.SMTP_USER, pass: env.SMTP_PASS, from: env.SMTP_FROM },
     adminNotificationEmail: env.ADMIN_NOTIFICATION_EMAIL || env.SMTP_FROM,

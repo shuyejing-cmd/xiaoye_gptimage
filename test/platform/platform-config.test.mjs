@@ -37,14 +37,15 @@ test("uses the domestic APIMart endpoint directly and requires both reconciliati
     ...baseEnv,
     IMAGE_PROVIDER: "apimart",
     APIMART_API_KEY: "apimart-key",
-    APIMART_IMAGE_MODEL: "gpt-image-2.5-flare"
+    APIMART_IMAGE_MODEL: "gpt-image-2.5-ext"
   };
   const config = loadPlatformConfig(env);
   assert.deepEqual(config.apimart, {
     apiKey: "apimart-key",
     baseUrl: "https://api.apib.ai/v1",
-    model: "gpt-image-2.5-flare"
+    model: "gpt-image-2.5-ext"
   });
+  assert.throws(() => loadPlatformConfig({ ...baseEnv, APIMART_IMAGE_MODEL: "gpt-image-2.5-flare" }), (error) => error.code === "invalid_config");
   assert.throws(() => loadPlatformConfig({ ...baseEnv, APIMART_API_KEY: "" }), (error) => error.code === "missing_config");
   assert.throws(() => loadPlatformConfig({ ...baseEnv, GPT_GE_API_KEY: "" }), (error) => error.code === "missing_config");
   assert.throws(() => loadPlatformConfig({ ...baseEnv, APIMART_BASE_URL: "http://api.apib.ai/v1" }), (error) => error.code === "invalid_config");
@@ -60,7 +61,7 @@ test("installation tokens use an independent pepper and configurable release ori
   const config = loadPlatformConfig(baseEnv);
   assert.equal(config.installationTokenPepper, "installations");
   assert.equal(config.publicOrigin, "https://xiaoyeai.cn");
-  assert.equal(config.installerVersion, "1.2.5");
+  assert.equal(config.installerVersion, "1.2.6");
   assert.equal(config.releaseRepository, null);
   assert.equal(config.releaseBaseUrl, null);
   assert.equal(loadPlatformConfig({ ...baseEnv, WORKBUDDY_RELEASE_REPOSITORY: "owner/repository" }).releaseRepository, "owner/repository");

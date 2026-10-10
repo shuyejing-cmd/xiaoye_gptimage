@@ -164,7 +164,7 @@ test("an interrupted submission without an output becomes unknown and is never r
   await worker.runOnce();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "unknown");
-  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 5 });
+  assert.deepEqual(saved.wallet, { availablePoints: 3, heldPoints: 2 });
   assert.equal(submitCalls, 0);
   await pool.end();
 });
@@ -187,7 +187,7 @@ test("a provider task still pending after 24 hours enters manual review", async 
   await worker.runOnce();
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "manual_review");
-  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 5 });
+  assert.deepEqual(saved.wallet, { availablePoints: 3, heldPoints: 2 });
   assert.deepEqual(notified, [job.requestId]);
   await pool.end();
 });

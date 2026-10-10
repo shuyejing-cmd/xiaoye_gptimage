@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { AppError } from "../shared/errors.mjs";
 import { createProviderUnreachableError, normalizeProviderError } from "./provider-error.mjs";
 import { resolveProviderImage } from "./provider-image-result.mjs";
@@ -9,7 +10,7 @@ const logProviderFailure = (logger, error) => logger?.error?.({ event: "provider
 export function createApimartClient({
   apiKey,
   baseUrl = DEFAULT_BASE_URL,
-  model = "gpt-image-2.5-sunburst",
+  model = "gpt-image-2.5-ext",
   fetchImpl = fetch,
   signalFactory = (milliseconds) => AbortSignal.timeout(milliseconds),
   logger = console
@@ -47,16 +48,15 @@ export function createApimartClient({
     async submit(request) {
       const body = {
         model,
+        version: request.referenceImageUrls?.length ? "sunburst" : "flare",
         prompt: request.prompt,
         size: request.size,
-        resolution: request.resolution,
-        quality: request.quality,
-        output_format: request.output_format,
+        resolution: request.resolution.toUpperCase(),
         n: request.n
       };
       if (request.referenceImageUrls?.length) body.image_urls = request.referenceImageUrls;
-      const response = await call("/images/generations", { method: "POST", body: JSON.stringify(body) }, 30_000);
-      const taskId = response?.data?.[0]?.task_id;
+      const response = await call("/images/generations", { method: "POST", headers: { "X-APIMart-Response-Version": "2026-07-27", "Idempotency-Key": request.requestId || randomUUID() }, body: JSON.stringify(body) }, 30_000);
+      const taskId = response?.data?.id || response?.data?.[0]?.task_id;
       if (!taskId) throw new AppError({ code: "provider_protocol_error", message: "provider returned no task id", httpStatus: 502 });
       return { taskId };
     },

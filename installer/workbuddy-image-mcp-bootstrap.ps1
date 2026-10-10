@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ExpectedPublisher = 'CN=Xiaoye AI'
-$ExpectedVersion = '1.2.5'
+$ExpectedVersion = '1.2.6'
 $ManifestPath = $null
 $InstallerPath = $null
 $ResultPath = $null

@@ -42,7 +42,7 @@ export function createGenerationJobs({ pool, cipher, requestIdFactory, now = () 
         if (beforeCreate) await beforeCreate(client);
         const active = await client.query("select count(*)::int as count from generation_jobs where user_id=$1 and state in ('queued','submitting','provider_pending','output_persisting','unknown')", [userId]);
         if (Number(active.rows[0].count) >= 1) throw new AppError({ code: "generation_concurrency_limit", message: "已有图片正在生成，请完成后再发起新任务", httpStatus: 429 });
-        const quote = quoteGeneration(request, referenceObjectKeys.length);
+        const quote = quoteGeneration(request, referenceObjectKeys.length, provider);
         const wallet = await lockWallet(client, userId);
         if (Number(wallet.available_points) < quote.pointsCost) throw new AppError({ code: "insufficient_points", message: "积分不足，请先充值", httpStatus: 402 });
         const requestId = requestIdFactory();

@@ -27,7 +27,7 @@ export function createGenerationWorker({ jobs, provider, outputStore, inputStore
             : undefined;
           let submitted;
           try {
-            submitted = await provider.submit({ ...job.payload.request, referenceImageUrls });
+            submitted = await provider.submit({ ...job.payload.request, referenceImageUrls, requestId: job.requestId });
           } catch (error) {
             if (!error?.retryable && error?.code !== "provider_protocol_error" && !ambiguousSubmissionCodes.has(error?.code)) throw error;
             await jobs.markUnknown({ requestId: job.requestId, errorCode: error?.code || "generation_submission_unknown" }).catch((markError) => logger.error?.({ event: "unknown_state_persist_failed", requestId: job.requestId, code: markError?.code || "database_error" }));

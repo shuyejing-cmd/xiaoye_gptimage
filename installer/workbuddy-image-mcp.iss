@@ -5,7 +5,7 @@
 [Setup]
 AppId={{B5187E32-8649-48EC-BBD0-CBB91366321E}
 AppName=WorkBuddy 图片 MCP
-AppVersion=1.2.5
+AppVersion=1.2.6
 DefaultDirName={autopf}\WorkBuddy Image MCP
 DefaultGroupName=WorkBuddy 图片 MCP
 ArchitecturesAllowed=x64compatible

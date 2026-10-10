@@ -11,7 +11,7 @@ import { createInstallationTokenService } from "../../src/platform/installations
 import { createRateLimiter } from "../../src/platform/http/rate-limiter.mjs";
 import { createPlatformApp } from "../../src/platform/http/platform-app.mjs";
 
-async function setup({ publicRegistrationEnabled = true, cookieSecure = true, generationAdmissionCheck = async () => true, providerStatus = () => null, releaseService = { getStatus: async () => ({ ready: true, version: "1.2.0", bootstrap_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp.ps1", manifest_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp-1.2.0.json", installer_url: "https://github.com/owner/repository/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe" }) } } = {}) {
+async function setup({ publicRegistrationEnabled = true, cookieSecure = true, provider = "apimart", generationAdmissionCheck = async () => true, providerStatus = () => null, releaseService = { getStatus: async () => ({ ready: true, version: "1.2.0", bootstrap_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp.ps1", manifest_url: "https://github.com/owner/repository/releases/download/v1.2.0/workbuddy-image-mcp-1.2.0.json", installer_url: "https://github.com/owner/repository/releases/download/v1.2.0/WorkBuddy-Image-MCP-Setup-1.2.0.exe" }) } } = {}) {
   const memory = newDb({ autoCreateForeignKeyIndices: true, noAstCoverageCheck: true });
   memory.public.registerFunction({ name: "strpos", args: ["text", "text"], returns: "integer", implementation: (text, search) => text.indexOf(search) + 1 });
   const { Pool } = memory.adapters.createPg();
@@ -27,7 +27,7 @@ async function setup({ publicRegistrationEnabled = true, cookieSecure = true, ge
   const walletService = createWalletService({ pool });
   const generationJobs = createGenerationJobs({ pool, cipher: createPayloadCipher({ key: Buffer.alloc(32, 4) }), requestIdFactory: () => `api-${++requestId}` });
   const installationTokenService = createInstallationTokenService({ pool, pepper: "installation-tokens", apiKeyService, randomBytes: () => Buffer.alloc(24, tokenSeed++) });
-  const app = createPlatformApp({ pool, authService, apiKeyService, installationTokenService, releaseService, walletService, generationJobs, rateLimiter: createRateLimiter({ pool }), temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) }, publicRegistrationEnabled, cookieSecure, publicOrigin: "https://xiaoyeai.cn", installerVersion: "1.2.0", readyCheck: async () => true, generationAdmissionCheck, providerStatus });
+  const app = createPlatformApp({ pool, authService, apiKeyService, installationTokenService, releaseService, walletService, generationJobs, rateLimiter: createRateLimiter({ pool }), temporaryStore: { putReference: async () => ({ objectKey: "private/reference.png" }) }, publicRegistrationEnabled, cookieSecure, publicOrigin: "https://xiaoyeai.cn", installerVersion: "1.2.0", provider, readyCheck: async () => true, generationAdmissionCheck, providerStatus });
   return { pool, app, sent };
 }
 
@@ -55,7 +55,7 @@ test("email login creates a secure website session and exposes the wallet", asyn
   assert.equal(me.json().user.email, "web@example.com");
   assert.deepEqual(me.json().wallet, { available_points: 20, held_points: 0 });
   const wallet = await app.inject({ method: "GET", url: "/api/wallet", headers: { cookie: loginResult.cookie } });
-  assert.equal(wallet.json().price_table["4k"].high, 22);
+  assert.equal(wallet.json().price_table["4k"], 3);
   await app.close();
   await pool.end();
 });
@@ -96,10 +96,26 @@ test("personal API key creates one idempotent billed job", async () => {
   assert.equal(first.statusCode, 202);
   assert.equal(duplicate.json().request_id, first.json().request_id);
   const balance = await app.inject({ method: "GET", url: "/v1/account/balance", headers: { authorization: `Bearer ${key}` } });
-  assert.equal(balance.json().available_points, 15);
-  assert.equal(balance.json().held_points, 5);
+  assert.equal(balance.json().available_points, 18);
+  assert.equal(balance.json().held_points, 2);
+  assert.equal(balance.json().price_table["2k"], 2);
+  assert.equal(first.json().points_cost, 2);
+  assert.equal(first.json().model_version, "flare");
+  assert.equal("quality" in first.json(), false);
+  await app.close();
+  await pool.end();
+});
+
+test("manual GPT.Ge fallback advertises and freezes its own price", async () => {
+  const { pool, app, sent } = await setup({ provider: "gpt_ge" });
+  const owner = await login(app, sent, "fallback@example.com", "fallback-browser");
+  const key = (await app.inject({ method: "POST", url: "/api/api-keys", headers: { cookie: owner.cookie }, payload: { name: "Fallback" } })).json().key;
+  const balance = await app.inject({ method: "GET", url: "/v1/account/balance", headers: { authorization: `Bearer ${key}` } });
   assert.equal(balance.json().price_table["2k"].medium, 5);
-  assert.equal(first.json().points_cost, 5);
+  const job = await app.inject({ method: "POST", url: "/v1/generations", headers: { authorization: `Bearer ${key}`, "idempotency-key": "fallback-price" }, payload: { prompt: "cat" } });
+  assert.equal(job.json().points_cost, 5);
+  assert.equal(job.json().price_version, 1);
+  assert.equal(job.json().quality, "medium");
   await app.close();
   await pool.end();
 });
@@ -139,7 +155,7 @@ test("provider outage does not hide an already accepted idempotent task", async 
   const retry = await app.inject(request);
   assert.equal(retry.statusCode, 202);
   assert.equal(retry.json().request_id, first.json().request_id);
-  assert.equal(retry.json().points_cost, 5);
+  assert.equal(retry.json().points_cost, 2);
   await app.close();
   await pool.end();
 });

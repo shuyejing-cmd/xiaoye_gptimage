@@ -82,20 +82,19 @@ test("explicit failure releases the hold while unknown keeps it frozen", async (
   await pool.end();
 });
 
-test("a 2K high job with two references snapshots and settles 25 points", async () => {
+test("a 2K editing job with two references snapshots and settles two points", async () => {
   const { pool, userId, jobs } = await setup();
-  await pool.query("update wallets set available_points=25 where user_id=$1", [userId]);
-  const job = await jobs.enqueue({ userId, idempotencyKey: "premium", provider: "apimart", request: { prompt: "edit", resolution: "2k", quality: "high" }, referenceObjectKeys: ["ref-1", "ref-2"] });
-  assert.equal(job.pointsCost, 25);
-  assert.equal(job.priceVersion, 1);
-  assert.equal((await jobs.enqueue({ userId, idempotencyKey: "premium", provider: "apimart", request: { prompt: "other", quality: "low" } })).pointsCost, 25);
-  assert.deepEqual((await jobs.getForUser({ userId, requestId: job.requestId })).wallet, { availablePoints: 0, heldPoints: 25 });
+  const job = await jobs.enqueue({ userId, idempotencyKey: "premium", provider: "apimart", request: { prompt: "edit", resolution: "2k" }, referenceObjectKeys: ["ref-1", "ref-2"] });
+  assert.equal(job.pointsCost, 2);
+  assert.equal(job.priceVersion, 2);
+  assert.equal((await jobs.enqueue({ userId, idempotencyKey: "premium", provider: "apimart", request: { prompt: "other", quality: "low" } })).pointsCost, 2);
+  assert.deepEqual((await jobs.getForUser({ userId, requestId: job.requestId })).wallet, { availablePoints: 3, heldPoints: 2 });
   await jobs.markOutputPersisting({ requestId: job.requestId, objectKey: "generated/premium.png", mimeType: "image/png", upstreamCost: 0.08123 });
   await jobs.succeed({ requestId: job.requestId });
   await jobs.succeed({ requestId: job.requestId });
-  assert.deepEqual((await jobs.getForUser({ userId, requestId: job.requestId })).wallet, { availablePoints: 0, heldPoints: 0 });
+  assert.deepEqual((await jobs.getForUser({ userId, requestId: job.requestId })).wallet, { availablePoints: 3, heldPoints: 0 });
   assert.equal((await pool.query("select upstream_cost_amount from generation_jobs where request_id=$1", [job.requestId])).rows[0].upstream_cost_amount, 0.08123);
-  assert.deepEqual((await pool.query("select event_type,amount from ledger_entries where reference_type='generation' order by id")).rows.map((row) => [row.event_type, row.amount]), [["hold", -25], ["capture", -25]]);
+  assert.deepEqual((await pool.query("select event_type,amount from ledger_entries where reference_type='generation' order by id")).rows.map((row) => [row.event_type, row.amount]), [["hold", -2], ["capture", -2]]);
   await pool.end();
 });
 

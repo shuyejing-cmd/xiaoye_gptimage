@@ -1,7 +1,7 @@
 ---
 name: workbuddy-image-workflow
 description: 在 WorkBuddy 中处理明确的图片生成、参考图编辑、生图提示词优化或 xiaoye-image 连接检查；纯讨论图片创意时不自动生图。
-version: 0.4.0
+version: 0.5.0
 display_name: "生图与本地下载"
 display_name_en: "Image Generation & Download"
 description_zh: "检测 xiaoye-image，按用户意愿优化或原样使用提示词，生成并保存图片。"
@@ -29,14 +29,14 @@ visibility: private
 - 用户给出较完整的画面描述时，默认保留其措辞和结构。主体、构图、风格、文字、参考图角色及禁止事项等信息已经明确，就不为了“优化”而改写。
 - 用户给出简短需求且未拒绝优化时，可轻量补足能直接看见的画面信息，例如构图、主体位置、光线、色彩或材质。保留用户已指定的细节，不凭空加入人物、品牌、文字、数量、风格或相互矛盾的要求。不需要固定模板或堆砌形容词。
 - 用户明确要求“先优化给我看”时，给出一版可编辑的提示词并停下，不自动生图。只有关键歧义会明显改变主体或编辑范围时，问一个简短问题；其他情况直接按已知要求处理。
-- 图生图要说清每张参考图的作用，以及“改什么、保留什么”。需要精确文字时，保留引号内的原文并描述位置；尺寸、质量和文件格式属于工具参数，不混入画面提示词。以上做法参考 [OpenAI Image Prompting Guide](https://developers.openai.com/api/docs/guides/image-prompting?site_locale=en)，但用户原意优先。
+- 图生图要说清每张参考图的作用，以及“改什么、保留什么”。需要精确文字时，保留引号内的原文并描述位置；画面比例与分辨率属于工具参数，不混入画面提示词。以上做法参考 [OpenAI Image Prompting Guide](https://developers.openai.com/api/docs/guides/image-prompting?site_locale=en)，但用户原意优先。
 
 ## MCP 参数与参考图
 
-- `generate_image` 必填 `prompt`；可选 `size`、`resolution`、`quality`、`output_format`、`reference_image_paths`。未指定或显式 `auto` 时后端采用 `size=1:1`、`resolution=2k`、`quality=medium`、`output_format=png`。默认价为 5 积分，每张参考图另加 5 积分；各档实际价格以 `get_balance.price_table` 为准。不要宣称本 Skill 能自动切换服务器的模型。
+- `generate_image` 必填 `prompt`；可选 `size`、`resolution`、`reference_image_paths`。未指定或显式 `auto` 时后端采用 `size=1:1`、`resolution=2k`。Ext 价格版本 2 为 1K 2 积分、默认 2K 2 积分、4K 3 积分，参考图不加价；始终以 `get_balance.price_table` 的实时结果为准。Ext 下服务端无参考图时用 Flare，有参考图时用 Sunburst；Skill 不自行改模型。若管理员临时切回价格版本 1，按余额接口返回的旧价目表报价。
 - 用户明确指定档位时照用；未指定时直接用服务端默认档。生成前可根据 `get_balance` 的价目表告知本次预计积分，不要求每张图再确认一次。即使绕过本 Skill，后端仍按同一价目表扣分。
 - 提示词最多 3000 字符。优化时保留用户原意并简洁表达，不为凑长度增加细节；用户已给完整提示词或要求原样使用时不要重写。
-- 用户指定的参数应使用 MCP 当前支持的值：`size` 为 `auto`、`1:1`、`3:2`、`2:3`、`4:3`、`3:4`、`5:4`、`4:5`、`16:9`、`9:16`、`2:1`、`1:2`、`3:1`、`1:3`、`21:9`；`resolution` 为 `auto`、`1k`、`2k`、`4k`；`quality` 为 `auto`、`low`、`medium`、`high`；格式为 `png`、`jpeg`、`webp`。无效值先请用户修正，不发起生图。
+- Ext 的 `size` 可用 `auto`、`1:1`、`3:2`、`2:3`、`4:3`、`3:4`、`5:4`、`4:5`、`16:9`、`9:16`、`21:9`；`resolution` 可用 `auto`、`1k`、`2k`、`4k`。Ext 不提供 `quality` 或 `output_format` 选择，不向工具传这两个字段；用户要 low/high 或指定文件格式时说明当前服务不支持，不悄悄改成其他档位。仅当 `get_balance.price_version=1` 时才按回退渠道的质量档与格式能力处理。
 - 参考图最多 4 张，保持用户指定顺序；只接受 PNG/JPEG/WebP，单张不超过 4 MiB。使用当前 WorkBuddy 实际授权读取目录中的本机绝对路径，不写死某个人的目录。附件路径不在授权目录时，可复制到授权目录中的新文件以完成本次生图；不得覆盖同名文件。无法取得合规本机路径时停止，不拿网络 URL 冒充路径。
 - 有参考图时统一传 `reference_image_paths` 数组；不要同时传单数 `reference_image_path`。无参考图时不传该字段。
 

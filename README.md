@@ -17,7 +17,7 @@ PostgreSQL 是账户、钱包、账本、订单和任务状态的唯一事实来
 
 - 符合防刷规则的新邮箱验证成功后赠送 20 积分；设备重复或同 IP 24 小时内超过 3 个验证账户时暂停自动奖励，待管理员核验后补发一次。首次充值不额外赠送。
 - 1 元＝10 积分；套餐金额按每 ¥0.10 换算 1 积分，充值审核只入账一次，不再发首充奖励。
-- 默认 2K medium 为 5 积分；1K low/medium/high 为 2/3/8，2K 为 3/5/15，4K 为 4/7/22，每张参考图另加 5 积分。创建任务时按实际报价原子减少可用积分并冻结同额积分；成功图片写入私有 COS 后才扣除冻结，明确失败全额释放，未知结果保持冻结。
+- APIMart Ext 默认 2K，每张 2 积分；1K 为 2 积分，4K 为 3 积分，参考图不加价。文生图使用 Flare，有参考图时使用 Sunburst。创建任务时按实际报价原子减少可用积分并冻结同额积分；成功图片写入私有 COS 后才扣除冻结，明确失败全额释放，未知结果保持冻结。旧任务保持创建时的积分价格。
 - 网络中断、上游可能已接单或 COS 上传结果不确定时不自动重提。对账 worker 查原任务或确定性 COS 对象；24 小时仍无法确认才进入人工复核。
 - 成功图片只临时保存 24 小时。生产环境必须在 COS 为生成和参考图前缀配置 24 小时生命周期规则。
 
@@ -61,7 +61,7 @@ APIMart 使用国内接口作为生产主供应商。服务器 `.env` 同时保�
 IMAGE_PROVIDER=apimart
 APIMART_API_KEY=replace-me
 APIMART_BASE_URL=https://api.apib.ai/v1
-APIMART_IMAGE_MODEL=gpt-image-2.5-sunburst
+APIMART_IMAGE_MODEL=gpt-image-2.5-ext
 GPT_GE_API_KEY=replace-me
 ```
 
@@ -138,9 +138,9 @@ WorkBuddy 不能执行本机命令时，使用网站显示的腾讯云固定版�
 }
 ```
 
-`generate_image` 支持文生图以及 1–4 张 PNG/JPEG/WebP 参考图；单张最多 4 MiB，总顺序由 `reference_image_paths` 决定。分辨率支持 `auto`、`1k`、`2k`、`4k`，默认与 `auto` 均采用 `2k`；质量默认与 `auto` 均采用 `medium`。生成前冻结积分，成功交付才结算；每张参考图加 5 积分。
+`generate_image` 支持文生图以及 1–4 张 PNG/JPEG/WebP 参考图；单张最多 4 MiB，总顺序由 `reference_image_paths` 决定。分辨率支持 `auto`、`1k`、`2k`、`4k`，默认与 `auto` 均采用 `2k`。Ext 不支持质量档位及指定输出格式：旧客户端传 `medium`、`png` 仍兼容，但不保证生成 PNG；显式传 `low`、`high`、`jpeg` 或 `webp` 会在冻结积分前拒绝。生成前冻结积分，成功交付才结算；参考图不加价。
 
-积分价格版本 1：1K 的 low/medium/high 为 2/3/8 分；2K 为 3/5/15 分；4K 为 4/7/22 分。默认 2K medium 为每张 5 分。比例和输出格式不加价；1 元充值兑换 10 积分，充值积分永久有效。服务端 `get_balance` 返回当前价格，不依赖 Skill 计算。
+积分价格版本 2：1K 为 2 分、默认 2K 为 2 分、4K 为 3 分，参考图不加价。Ext 的 `quality` 和 `output_format` 不提供新选择，兼容旧请求中的 `medium` 与 `png`；1 元充值兑换 10 积分，充值积分永久有效。服务端 `get_balance` 返回当前价格，不依赖 Skill 计算。历史任务保留创建时的价格版本和冻结金额。
 
 ## 管理员手动加分
 
@@ -148,13 +148,13 @@ WorkBuddy 不能执行本机命令时，使用网站显示的腾讯云固定版�
 
 ## 安装器发布
 
-生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`、`WORKBUDDY_INSTALLER_VERSION=1.2.5`、腾讯云版本目录 `WORKBUDDY_RELEASE_BASE_URL` 和公开仓库 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。腾讯云作为默认下载地址，GitHub Release 保存同版本备份：
+生产 API 必须设置独立的 `INSTALLATION_TOKEN_PEPPER`、`WORKBUDDY_INSTALLER_VERSION=1.2.6`、腾讯云版本目录 `WORKBUDDY_RELEASE_BASE_URL` 和公开仓库 `WORKBUDDY_RELEASE_REPOSITORY=owner/repository`。腾讯云作为默认下载地址，GitHub Release 保存同版本备份：
 
 - `workbuddy-image-mcp.ps1`
-- `workbuddy-image-mcp-1.2.5.json`
-- `WorkBuddy-Image-MCP-Setup-1.2.5.exe`
+- `workbuddy-image-mcp-1.2.6.json`
+- `WorkBuddy-Image-MCP-Setup-1.2.6.exe`
 
-推送 `v1.2.5` 标签后，`.github/workflows/release.yml` 使用 Node.js 22 和 Inno Setup 只构建一次正式三件套，并运行打包后 bridge 握手与真实 EXE 初始化检查；三个文件完整、非空且清单哈希一致后才公开。随后从 GitHub Release 下载这三个原文件，不做修改或重新构建，上传到腾讯云 `releases/v1.2.5/` 目录。这样腾讯云和 GitHub 的 EXE 使用同一个 SHA-256。未签名 1.2.5 是公开内测版，Windows 可能显示“未知发布者”。
+推送 `v1.2.6` 标签后，`.github/workflows/release.yml` 使用 Node.js 22 和 Inno Setup 只构建一次正式三件套，并运行打包后 bridge 握手与真实 EXE 初始化检查；三个文件完整、非空且清单哈希一致后才公开。随后从 GitHub Release 下载这三个原文件，不做修改或重新构建，上传到腾讯云 `releases/v1.2.6/` 目录。这样腾讯云和 GitHub 的 EXE 使用同一个 SHA-256。未签名 1.2.6 是公开内测版，Windows 可能显示“未知发布者”。
 
 后端每 5 分钟检查一次腾讯云版本目录，校验 bootstrap 大于 1 KiB、EXE 大于 10 MiB、清单版本和下载地址一致。安装时再对实际 EXE 做 SHA-256 校验。检查未通过时，`GET /api/install-release/status` 返回未就绪，网站禁用提示词与下载操作，也不会签发新的 30 分钟一次性安装码。
 

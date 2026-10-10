@@ -6,7 +6,7 @@ import { parseGenerationRequest } from "../../shared/contracts.mjs";
 import { AppError } from "../../shared/errors.mjs";
 import { withTransaction } from "../db/pool.mjs";
 import { buildWorkBuddyInstallPrompt } from "../installations/install-prompt.mjs";
-import { pointsForFen, PRICE_TABLE, PRICE_VERSION, REFERENCE_IMAGE_POINTS } from "../billing/points-pricing.mjs";
+import { pointsForFen, pricingForProvider } from "../billing/points-pricing.mjs";
 
 const COOKIE_NAME = "wb_session";
 const MAX_REFERENCE_BYTES = 4 * 1024 * 1024;
@@ -22,8 +22,9 @@ function walletBody(wallet) {
   return { available_points: Number(wallet.availablePoints), held_points: Number(wallet.heldPoints) };
 }
 
-function pricingBody() {
-  return { price_version: PRICE_VERSION, price_table: PRICE_TABLE, reference_image_points: REFERENCE_IMAGE_POINTS, defaults: { size: "1:1", resolution: "2k", quality: "medium", output_format: "png" } };
+function pricingBody(provider) {
+  const pricing = pricingForProvider(provider);
+  return { price_version: pricing.priceVersion, price_table: pricing.priceTable, reference_image_points: pricing.referenceImagePoints, defaults: { size: "1:1", resolution: "2k", ...(provider === "gpt_ge" ? { quality: "medium", output_format: "png" } : {}) } };
 }
 
 function generationBody(job) {
@@ -33,7 +34,7 @@ function generationBody(job) {
     points_cost: job.pointsCost,
     price_version: job.priceVersion,
     resolution: job.resolution,
-    quality: job.quality,
+    ...(job.priceVersion === 1 ? { quality: job.quality } : { model_version: job.referenceCount > 0 ? "sunburst" : "flare" }),
     reference_count: job.referenceCount,
     ...(job.errorCode ? { error_code: job.errorCode } : {}),
     ...(job.wallet ? walletBody(job.wallet) : {})
@@ -62,8 +63,8 @@ export function createPlatformApp({
   publicRegistrationEnabled = false,
   cookieSecure = true,
   publicOrigin = "https://xiaoyeai.cn",
-  installerVersion = "1.2.5",
-  provider = "gpt-ge",
+  installerVersion = "1.2.6",
+  provider = "apimart",
   logger = false
 }) {
   const app = Fastify({ logger, trustProxy: true, bodyLimit: 12 * 1024 * 1024 });
@@ -142,7 +143,7 @@ export function createPlatformApp({
     const user = await websiteUser(request);
     return { user, wallet: walletBody(await walletService.getBalance(user.id)) };
   });
-  app.get("/api/wallet", async (request) => ({ ...walletBody(await walletService.getBalance((await websiteUser(request)).id)), ...pricingBody() }));
+  app.get("/api/wallet", async (request) => ({ ...walletBody(await walletService.getBalance((await websiteUser(request)).id)), ...pricingBody(provider) }));
   app.get("/api/ledger", async (request) => {
     const user = await websiteUser(request);
     const rows = await pool.query("select id,event_type,amount,reference_type,reference_id,created_at from ledger_entries where user_id=$1 order by created_at desc,id desc limit 100", [user.id]);
@@ -403,7 +404,7 @@ export function createPlatformApp({
   app.get("/v1/account/balance", async (request) => {
     const identity = await keyUser(request);
     if (rateLimiter) await rateLimiter.consume({ scope: "key_query", subject: identity.keyId, limit: 60, windowMs: 60_000 });
-    return { ...walletBody(await walletService.getBalance(identity.userId)), ...pricingBody() };
+    return { ...walletBody(await walletService.getBalance(identity.userId)), ...pricingBody(provider) };
   });
 
   app.setErrorHandler((error, request, reply) => {

@@ -23,7 +23,7 @@ async function setup(provider, options = {}) {
   return { pool, userId: user.id, jobs, worker, stored };
 }
 
-test("worker captures one credit only after persisting a verified provider result", async () => {
+test("worker captures the quoted GPT.Ge hold only after persisting a verified provider result", async () => {
   const provider = { mode: "synchronous", generate: async () => ({ imageBuffer: Buffer.from("image"), mimeType: "image/png" }) };
   const { pool, userId, jobs, worker, stored } = await setup(provider);
   const job = await jobs.enqueue({ userId, idempotencyKey: "success", provider: "gpt_ge", request: { prompt: "cat" } });
@@ -115,7 +115,7 @@ test("a database failure after provider acceptance keeps the charge held", async
   assert.equal(result.state, "unknown");
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(saved.state, "unknown");
-  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 5 });
+  assert.deepEqual(saved.wallet, { availablePoints: 3, heldPoints: 2 });
   await pool.end();
 });
 
@@ -132,7 +132,7 @@ test("an unavailable asynchronous provider defers the job before submitting with
   const saved = await jobs.getForUser({ userId, requestId: job.requestId });
   assert.equal(result.state, "queued");
   assert.equal(saved.state, "queued");
-  assert.deepEqual(saved.wallet, { availablePoints: 0, heldPoints: 5 });
+  assert.deepEqual(saved.wallet, { availablePoints: 3, heldPoints: 2 });
   assert.equal(submitCalls, 0);
   await pool.end();
 });

@@ -7,7 +7,7 @@ import { normalizeReferenceImagePaths } from "./reference-images.mjs";
 export function createBridgeServer({ allowedRoots, gatewayClient }) {
   const server = new McpServer({ name: "workbuddy-image-bridge", version: "0.1.0" });
   server.registerTool("generate_image", {
-    description: "Generate one image. Default is 2K medium (5 points); each reference image adds 5 points. Use get_balance for the current server price table. Pass one to four local reference_image_paths; reference_image_path remains supported for one image.",
+    description: "Generate one image. Default 2K costs 2 points; 1K costs 2 and 4K costs 3. References do not add points. Text uses Flare and reference editing uses Sunburst. Use get_balance for current prices. Pass one to four local reference_image_paths; reference_image_path remains supported. Omit quality and output_format (legacy medium/png accepted).",
     inputSchema: {
       prompt: z.string().min(1),
       reference_image_path: z.string().optional(),

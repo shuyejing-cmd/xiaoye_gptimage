@@ -47,12 +47,12 @@ test("apimart preserves its provider-protocol error for a malformed success resp
   );
 });
 
-test("APIMart sends only documented 2.5 fields and uses operation-specific timeouts", async () => {
+test("APIMart Ext sends Flare for text, Sunburst for reference editing, and no unsupported fields", async () => {
   const calls = [];
   const timeouts = [];
   const client = createApimartClient({
     apiKey: "key",
-    model: "gpt-image-2.5-sunburst",
+    model: "gpt-image-2.5-ext",
     signalFactory: (milliseconds) => { timeouts.push(milliseconds); return AbortSignal.abort(); },
     fetchImpl: async (url, init) => {
       calls.push({ url, init, body: init.body && JSON.parse(init.body) });
@@ -63,21 +63,39 @@ test("APIMart sends only documented 2.5 fields and uses operation-specific timeo
   });
   await client.healthCheck();
   await client.submit({
-    prompt: "cat", size: "1:1", resolution: "4k", quality: "high", output_format: "png", n: 1,
-    referenceImageUrls: ["https://cos.example/ref.png"], requestId: "must-not-leak", userId: 99
+    prompt: "cat", size: "1:1", resolution: "2k", quality: "medium", output_format: "png", n: 1,
+    requestId: "request-1", userId: 99
+  });
+  await client.submit({
+    prompt: "edit", size: "16:9", resolution: "4k", quality: "medium", output_format: "png", n: 1,
+    referenceImageUrls: ["https://cos.example/ref.png"], requestId: "request-2", userId: 99
   });
   await client.getTask("task-25");
-  assert.deepEqual(timeouts, [10_000, 30_000, 15_000]);
+  assert.deepEqual(timeouts, [10_000, 30_000, 30_000, 15_000]);
   assert.deepEqual(calls[1].body, {
-    model: "gpt-image-2.5-sunburst",
+    model: "gpt-image-2.5-ext",
+    version: "flare",
     prompt: "cat",
     size: "1:1",
-    resolution: "4k",
-    quality: "high",
-    output_format: "png",
+    resolution: "2K",
+    n: 1
+  });
+  assert.deepEqual(calls[2].body, {
+    model: "gpt-image-2.5-ext",
+    version: "sunburst",
+    prompt: "edit",
+    size: "16:9",
+    resolution: "4K",
     n: 1,
     image_urls: ["https://cos.example/ref.png"]
   });
+  assert.equal(calls[1].init.headers["Idempotency-Key"], "request-1");
+  assert.equal(calls[2].init.headers["Idempotency-Key"], "request-2");
+});
+
+test("APIMart Ext accepts the documented 202 task response", async () => {
+  const client = createApimartClient({ apiKey: "key", fetchImpl: async () => new Response(JSON.stringify({ code: 202, data: { id: "task-ext-1", status: "pending" } }), { status: 202 }) });
+  assert.deepEqual(await client.submit({ prompt: "cat", size: "1:1", resolution: "2k", n: 1 }), { taskId: "task-ext-1" });
 });
 
 test("APIMart downloads results through its injected transport with a 120 second budget", async () => {
